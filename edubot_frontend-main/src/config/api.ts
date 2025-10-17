@@ -24,6 +24,7 @@ const getApiUrl = (): string => {
   return 'http://localhost:8000';
 };
 
+
 export const API_CONFIG = {
   BASE_URL: getApiUrl(),
   
@@ -49,7 +50,7 @@ export const API_CONFIG = {
     DELETE_FILE: '/api/chat/files',
     
     // ========================
-    // COURSES (12 endpoints)
+    // COURSES (14 endpoints) - UPDATED
     // ========================
     GENERATE_COMPLETE_COURSE: '/api/courses/generate-complete',
     COURSES: '/api/courses',
@@ -63,6 +64,8 @@ export const API_CONFIG = {
     CREATE_COURSE: '/api/courses/create',
     UPDATE_COURSE: '/api/courses',
     SEARCH_COURSES: '/api/courses/search',
+    GENERATE_SECTION_QUIZ: '/api/courses',  // NEW
+    SUBMIT_SECTION_QUIZ: '/api/courses',     // NEW
     
     // ========================
     // ASSESSMENTS (4 endpoints)
@@ -147,6 +150,7 @@ export const API_CONFIG = {
   }
 };
 
+
 // Helper function to build full URL
 export const buildUrl = (endpoint: string, params?: Record<string, string | number>): string => {
   let url = `${API_CONFIG.BASE_URL}${endpoint}`;
@@ -160,6 +164,7 @@ export const buildUrl = (endpoint: string, params?: Record<string, string | numb
   
   return url;
 };
+
 
 // API endpoint builder helpers
 export const API_ROUTES = {
@@ -208,6 +213,14 @@ export const API_ROUTES = {
       `${API_CONFIG.ENDPOINTS.UPDATE_COURSE}/${courseId}/update?userid=${userId}`,
     search: (query: string, userId: string) => 
       `${API_CONFIG.ENDPOINTS.SEARCH_COURSES}?query=${encodeURIComponent(query)}&userid=${userId}`,
+    
+    // ========================
+    // NEW: Quiz endpoints
+    // ========================
+    generateQuiz: (courseId: string, sectionId: string, userId: string) => 
+      `${API_CONFIG.ENDPOINTS.GENERATE_SECTION_QUIZ}/${courseId}/sections/${sectionId}/quiz?userid=${userId}`,
+    submitQuiz: (courseId: string, sectionId: string, userId: string) => 
+      `${API_CONFIG.ENDPOINTS.SUBMIT_SECTION_QUIZ}/${courseId}/sections/${sectionId}/quiz/submit?userid=${userId}`,
   },
   
   // Assessments
@@ -295,6 +308,7 @@ export const API_ROUTES = {
     root: () => API_CONFIG.ENDPOINTS.ROOT,
   },
 };
+
 
 // Export type for route helpers
 export type ApiRoutes = typeof API_ROUTES;

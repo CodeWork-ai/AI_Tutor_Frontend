@@ -52,6 +52,8 @@ interface ApiSectionDetail extends CourseSection {
   keypoints?: any[];
   sub_topics?: any[];
   subtopics?: any[];
+  introduction?: string;
+  content?: string;
 }
 
 type LearningState = {
@@ -61,8 +63,8 @@ type LearningState = {
         video_links?: Array<{
           link: string;
           title: string;
-          topic: string;
-          duration: string;
+          topic?: string;
+          duration?: string;
         }>;
         introduction?: string;
         key_points?: string[];
@@ -70,6 +72,7 @@ type LearningState = {
         content?: string;
         examples?: string[];
         exercises?: string[];
+        is_completed?: boolean;
       })
     | null;
   currentSectionIndex: number;
@@ -91,6 +94,142 @@ interface QuizState {
   score: number;
   totalQuestions: number;
 }
+
+/** ──────────────────────────────────────────────────────────────────────────
+ * JSON Blob Handling Utilities
+ * Detect & parse embedded JSON (e.g. {"topics":[...], "videolinks":[...]})
+ * Merge into normalized section fields and strip the blob from rendered content
+ * ────────────────────────────────────────────────────────────────────────── */
+
+type RawBlob = {
+  topics?: string[]; // ["HTML","CSS",...]
+  subtopics?: { subtitle: string; subexplanation: string }[];
+  keypoints?: string[];
+  key_points?: string[];
+  videolinks?: Array<{ title: string; link: string; duration?: string; topic?: string }>;
+  video_links?: Array<{ title: string; link: string; duration?: string; topic?: string }>;
+  introduction?: string;
+  description?: string;
+};
+
+function safeTryParseJson<T = any>(text?: string): T | null {
+  if (!text) return null;
+  const trimmed = text.trim();
+  // quick check for a standalone JSON object
+  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || trimmed.includes('"topics"') || trimmed.includes('"videolinks"')) {
+    // Try full text first
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // Try to find a likely JSON object within the text (greedy but safe enough)
+      const match = trimmed.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          return JSON.parse(match[0]);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeFromBlob(blob: RawBlob) {
+  // Normalize keys and shape expected by UI
+  const video_links =
+    blob.video_links ||
+    blob.videolinks ||
+    [];
+
+  const key_points =
+    blob.key_points ||
+    blob.keypoints ||
+    [];
+
+  let sub_topics: Array<{ subtitle: string; subexplanation: string }> = [];
+
+  if (Array.isArray(blob.subtopics)) {
+    sub_topics = blob.subtopics;
+  } else if (Array.isArray(blob.topics)) {
+    // Convert ["HTML","CSS"] → [{subtitle, subexplanation:''}]
+    sub_topics = blob.topics.map((t) => ({
+      subtitle: t,
+      subexplanation: "",
+    }));
+  }
+
+  const introduction = blob.introduction || blob.description;
+
+  return { video_links, key_points, sub_topics, introduction };
+}
+
+function stripJsonBlobFromText(text?: string): string | undefined {
+  if (!text) return text;
+  // Remove the first JSON object found (handles the common case where blob is pasted inline)
+  return text.replace(/\{[\s\S]*\}/, "").trim();
+}
+
+/** Minimal markdown → HTML (code fences + inline code) */
+function toHtmlContent(raw?: string): string {
+  if (!raw) return "";
+  // Escape basic HTML to avoid injection, then re-open tags we add
+  const escaped = raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // Code blocks ```...```
+  const withBlocks = escaped.replace(
+    /```([\s\S]*?)```/g,
+    (_m, code) =>
+      `<pre class="not-prose bg-muted p-4 rounded-lg overflow-x-auto"><code class="text-sm">${code}</code></pre>`
+  );
+  // Inline code `...`
+  const withInline = withBlocks.replace(
+    /`([^`]+)`/g,
+    (_m, code) => `<code class="bg-muted px-1 py-0.5 rounded text-sm">${code}</code>`
+  );
+  // Newlines
+  return withInline.replace(/\n/g, "<br />");
+}
+
+/** Merge backend response + any embedded JSON blob from introduction/content */
+function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailResponse) {
+  // Start with backend-provided normalized keys
+  let merged: any = {
+    ...sectionDetail,
+    video_links: sectionDetail.video_links || sectionDetail.videolinks,
+    key_points: sectionDetail.key_points || sectionDetail.keypoints,
+    sub_topics: sectionDetail.sub_topics || sectionDetail.subtopics,
+  };
+
+  const introBlob = safeTryParseJson<RawBlob>(sectionDetail.introduction);
+  const contentBlob = safeTryParseJson<RawBlob>(sectionDetail.content);
+
+  // Prefer content blob if present, otherwise introduction blob
+  const blob = contentBlob || introBlob;
+
+  if (blob) {
+    const { video_links, key_points, sub_topics, introduction } = normalizeFromBlob(blob);
+    merged.video_links = merged.video_links || video_links;
+    merged.key_points = merged.key_points || key_points;
+    merged.sub_topics = merged.sub_topics || sub_topics;
+    if (!merged.introduction && introduction) merged.introduction = introduction;
+  }
+
+  // Strip JSON from original fields so we don’t render raw JSON
+  merged.introduction = stripJsonBlobFromText(merged.introduction);
+  merged.content = stripJsonBlobFromText(merged.content);
+
+  // Ensure arrays
+  if (!Array.isArray(merged.video_links)) merged.video_links = [];
+  if (!Array.isArray(merged.key_points)) merged.key_points = [];
+  if (!Array.isArray(merged.sub_topics)) merged.sub_topics = [];
+
+  return merged;
+}
+
+/** ────────────────────────────────────────────────────────────────────────── */
 
 export function Learning() {
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
@@ -136,7 +275,7 @@ export function Learning() {
       setIsLoading(true);
       const response = await apiService.getCourses();
       const filteredCourses = response.courses.filter(
-        (course) => course.title !== "General Submissions"
+        (course: Course) => course.title !== "General Submissions"
       );
       setCourses(filteredCourses);
     } catch (error) {
@@ -155,8 +294,6 @@ export function Learning() {
           apiService.getCourseSections(courseId),
           apiService.getCourseProgress(courseId).catch(() => null),
         ]);
-
-      console.log("📊 Progress response:", progressResponse);
 
       const isCurrentUserEnrolled =
         progressResponse?.progress?.enrolled || false;
@@ -200,7 +337,6 @@ export function Learning() {
   ): Promise<QuizQuestion[]> => {
     try {
       setIsLoadingQuiz(true);
-      // Call API to generate quiz based on section content
       const response = await apiService.generateSectionQuiz(courseId, sectionId);
       return response.questions || [];
     } catch (error) {
@@ -233,7 +369,7 @@ export function Learning() {
         selectedAnswers: {},
         showResult: false,
         score: 0,
-        totalQuestions: 5,
+        totalQuestions: questions.length,
       });
 
       setViewMode("quiz");
@@ -273,61 +409,74 @@ export function Learning() {
     }
   };
 
+  // Submit quiz to backend API for validation
   const handleQuizSubmit = async () => {
-    let score = 0;
-    quizState.questions.forEach((question) => {
-      if (quizState.selectedAnswers[question.id] === question.correctAnswer) {
-        score++;
-      }
-    });
+    if (!learning.selectedCourse || !learning.selectedSection) {
+      toast.error("Course or section not found");
+      return;
+    }
 
-    setQuizState((prev) => ({
-      ...prev,
-      score,
-      showResult: true,
-    }));
+    try {
+      setIsLoadingQuiz(true);
+
+      const response = await apiService.submitSectionQuiz(
+        learning.selectedCourse.id,
+        learning.selectedSection.id,
+        quizState.selectedAnswers
+      );
+
+      setQuizState((prev) => ({
+        ...prev,
+        score: response.score,
+        showResult: true,
+      }));
+
+      if (response.passed) {
+        toast.success(
+          `Excellent! You scored ${response.score}/${response.totalQuestions} 🎉`
+        );
+      } else {
+        toast.error(
+          `You scored ${response.score}/${response.totalQuestions}. Please review the material.`
+        );
+      }
+    } catch (error) {
+      console.error("Failed to submit quiz:", error);
+      toast.error("Failed to submit quiz. Please try again.");
+    } finally {
+      setIsLoadingQuiz(false);
+    }
   };
 
   const handleQuizResultAction = async () => {
     const passed = quizState.score >= 3;
 
     if (passed) {
-      // Mark section as complete and move to next
       await handleCompleteSection(
         learning.selectedCourse!.id,
         learning.selectedSection!.id
       );
-      
-      // Wait for completion to process
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
+
       // Move to next section automatically
       if (learning.currentSectionIndex < sections.length - 1) {
         const nextIndex = learning.currentSectionIndex + 1;
         const nextSection = sections[nextIndex];
         await handleSectionSelect(nextSection, nextIndex);
+        toast.success("Moving to next section!");
       } else {
-        // If last section, go back to course details
         setViewMode("course-details");
+        toast.success("Congratulations! You've completed the course! 🎓");
       }
     } else {
-      // Failed - go to previous section
-      if (learning.currentSectionIndex > 0) {
-        const prevIndex = learning.currentSectionIndex - 1;
-        const prevSection = sections[prevIndex];
-        await handleSectionSelect(prevSection, prevIndex);
-        toast.error("Please review the previous section and try again.");
-      } else {
-        // If first section, just go back to section view
-        setViewMode("section-learning");
-        toast.error("Please review the section content and try again.");
-      }
+      setViewMode("section-learning");
+      toast.error("Please review the section content and try again.", {
+        duration: 5000,
+      });
     }
   };
 
   const handleCompleteSection = async (courseId: string, sectionId: string) => {
     if (isUpdatingRef.current) {
-      console.log("⚠️ Update already in progress, skipping...");
       return;
     }
 
@@ -336,17 +485,11 @@ export function Learning() {
 
     try {
       localCompletedSectionsRef.current.add(sectionId);
-      console.log(
-        "✅ Added to local completed:",
-        Array.from(localCompletedSectionsRef.current)
-      );
 
       await apiService.completeSection(courseId, sectionId);
-      console.log("✅ Section marked complete on backend");
-
       toast.success("Section completed! 🎉");
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       let courseResponse: any;
       let sectionsResponse: any;
@@ -374,21 +517,13 @@ export function Learning() {
         const backendCompleted = new Set(backendCompletedArray);
         const backendHasSection = backendCompleted.has(sectionId);
 
-        console.log(
-          `🔄 Attempt ${attempts + 1}: Backend has ${
-            backendCompleted.size
-          } sections, includes current: ${backendHasSection}`
-        );
-
         if (backendHasSection) {
-          console.log("✅ Backend confirmed completion!");
           break;
         }
 
         attempts++;
         if (attempts < maxAttempts) {
-          console.log("⏳ Waiting for backend to update...");
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 600));
         }
       }
 
@@ -411,13 +546,6 @@ export function Learning() {
         ])
       );
 
-      console.log("🔀 Merged completed sections:", {
-        backend: backendCompletedSections.length,
-        local: localCompletedSectionsRef.current.size,
-        merged: mergedCompleted.length,
-        sections: mergedCompleted,
-      });
-
       localCompletedSectionsRef.current = new Set(mergedCompleted);
 
       const totalSections =
@@ -436,14 +564,6 @@ export function Learning() {
         total_sections: totalSections,
       };
 
-      console.log("📊 Final calculated progress:", {
-        backendProgress,
-        completedCount: mergedCompleted.length,
-        totalSections,
-        calculatedProgress,
-        finalProgress,
-      });
-
       setSelectedCourseDetails(courseWithCorrectEnrollment);
       setSections(sectionsResponse.sections);
       setProgress(updatedProgress);
@@ -451,12 +571,10 @@ export function Learning() {
       const sectionDetail = (await apiService.getSectionDetail(
         courseId,
         sectionId
-      )) as any;
+      )) as ApiSectionDetail & SectionDetailResponse;
+
       const formattedSection = {
-        ...sectionDetail,
-        video_links: sectionDetail.videolinks || sectionDetail.video_links,
-        key_points: sectionDetail.keypoints || sectionDetail.key_points,
-        sub_topics: sectionDetail.subtopics || sectionDetail.sub_topics,
+        ...normalizeSectionDetail(sectionDetail),
         is_completed: true,
       };
 
@@ -487,8 +605,7 @@ export function Learning() {
     index: number
   ) => {
     if (isUpdatingRef.current) {
-      console.log("⚠️ Update in progress, waiting...");
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
 
     try {
@@ -529,26 +646,16 @@ export function Learning() {
             total_sections: totalSections,
           };
 
-          console.log("🔄 Progress refreshed on section select:", {
-            backend: backendCompletedSections.length,
-            local: localCompletedSectionsRef.current.size,
-            merged: mergedCompleted.length,
-            progress: finalProgress,
-          });
-
           setProgress(updatedProgress);
         }
 
         const sectionDetail = (await apiService.getSectionDetail(
           learning.selectedCourse.id,
           section.id
-        )) as any;
-        const formattedSection = {
-          ...sectionDetail,
-          video_links: sectionDetail.videolinks || sectionDetail.video_links,
-          key_points: sectionDetail.keypoints || sectionDetail.key_points,
-          sub_topics: sectionDetail.subtopics || sectionDetail.sub_topics,
-        };
+        )) as ApiSectionDetail & SectionDetailResponse;
+
+        const formattedSection = normalizeSectionDetail(sectionDetail);
+
         setLearning((prev) => ({
           ...prev,
           selectedSection: formattedSection as any,
@@ -597,13 +704,6 @@ export function Learning() {
       completedSectionsList.includes(currentSection?.id) ||
       localCompletedSectionsRef.current.has(currentSection?.id || "");
 
-    console.log("🔍 Next section check:", {
-      currentSectionId: currentSection?.id,
-      isCompleted: isCurrentCompleted,
-      completedList: completedSectionsList,
-      localCompleted: Array.from(localCompletedSectionsRef.current),
-    });
-
     if (!isCurrentCompleted) {
       toast.error(
         "Please mark the current section as complete before moving on.",
@@ -617,7 +717,7 @@ export function Learning() {
       const nextSection = sections[nextIndex];
 
       if (isUpdatingRef.current) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
       await handleSectionSelect(nextSection, nextIndex);
@@ -630,7 +730,7 @@ export function Learning() {
       const prevSection = sections[prevIndex];
 
       if (isUpdatingRef.current) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
       await handleSectionSelect(prevSection, prevIndex);
@@ -689,7 +789,9 @@ export function Learning() {
             <div className="size-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
               <Award className="text-white size-8" />
             </div>
-            <p className="text-muted-foreground">Generating quiz...</p>
+            <p className="text-muted-foreground">
+              {quizState.showResult ? "Submitting quiz..." : "Generating quiz..."}
+            </p>
           </div>
         </div>
       );
@@ -727,24 +829,42 @@ export function Learning() {
               <div className="space-y-4">
                 {passed ? (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                    <p className="text-green-800">
-                      Great job! You've passed the quiz and completed this
-                      section. Moving to the next section...
+                    <p className="text-green-800 font-medium">
+                      ✅ Great job! You've passed the quiz and completed this section.
+                    </p>
+                    <p className="text-green-700 text-sm mt-2">
+                      Moving to the next section...
                     </p>
                   </div>
                 ) : (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                    <p className="text-red-800">
-                      You need at least 3 correct answers to pass. Reviewing
-                      previous section...
+                    <p className="text-red-800 font-medium">
+                      ❌ You need at least 3 correct answers to pass.
+                    </p>
+                    <p className="text-red-700 text-sm mt-2">
+                      Please review the section content and try again.
                     </p>
                   </div>
                 )}
                 <Button
                   onClick={handleQuizResultAction}
-                  className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700"
+                  className={`w-full ${
+                    passed
+                      ? "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700"
+                      : "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
+                  }`}
                 >
-                  {passed ? "Continue to Next Section" : "Review Previous Section"}
+                  {passed ? (
+                    <>
+                      Continue to Next Section
+                      <ArrowRight className="size-4 ml-2" />
+                    </>
+                  ) : (
+                    <>
+                      <ArrowLeft className="size-4 mr-2" />
+                      Review Section Content
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -858,10 +978,10 @@ export function Learning() {
             ) : (
               <Button
                 onClick={handleQuizSubmit}
-                disabled={!allQuestionsAnswered}
+                disabled={!allQuestionsAnswered || isLoadingQuiz}
                 className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700"
               >
-                Submit Quiz
+                {isLoadingQuiz ? "Submitting..." : "Submit Quiz"}
                 <Award className="size-4 ml-2" />
               </Button>
             )}
@@ -1192,9 +1312,9 @@ export function Learning() {
                             <h3 className="font-medium text-foreground">
                               {section.title}
                             </h3>
-                            {isCompleted && section.completed_at && (
+                            {isCompleted && (section as any).completed_at && (
                               <p className="text-xs text-green-600 mt-1">
-                                Completed on {formatDate(section.completed_at)}
+                                Completed on {formatDate((section as any).completed_at)}
                               </p>
                             )}
                             {!isEnrolled && (
@@ -1312,14 +1432,14 @@ export function Learning() {
             <div className="max-w-4xl mx-auto p-6 space-y-10">
               {learning.selectedSection.video_links &&
                 learning.selectedSection.video_links.length > 0 && (
-                  <div className="space-y-6">
+                  <div className="space-y-10">
                     <h2 className="text-2xl font-bold tracking-tight">
                       Video Lessons
                     </h2>
                     <div className="space-y-6">
                       {learning.selectedSection.video_links.map(
                         (video, index) => {
-                          let videoId = null;
+                          let videoId: string | null = null;
                           if (video.link.includes("youtube.com/embed/")) {
                             videoId = video.link
                               .split("youtube.com/embed/")[1]
@@ -1351,7 +1471,7 @@ export function Learning() {
                                     )
                                   }
                                 >
-                                  <div className="w-full h-[500px] min-h-[500px]">
+                                  <div className="w-full" style={{ height: '520px' }}>
                                     <iframe
                                       src={videoSrc}
                                       title={video.title}
@@ -1359,12 +1479,6 @@ export function Learning() {
                                       allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
                                       allowFullScreen
                                       className="w-full h-full"
-                                      style={{
-                                        pointerEvents:
-                                          activeVideo === videoId
-                                            ? "auto"
-                                            : "none",
-                                      }}
                                     />
                                   </div>
                                   {activeVideo !== videoId && (
@@ -1376,7 +1490,7 @@ export function Learning() {
                                 <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
                                   <div className="flex items-center gap-2">
                                     <Clock className="size-4" />
-                                    <span>{video.duration}</span>
+                                    <span>{video.duration || "—"}</span>
                                   </div>
                                 </div>
                               </CardContent>
@@ -1410,16 +1524,7 @@ export function Learning() {
                 {learning.selectedSection.content && (
                   <div
                     dangerouslySetInnerHTML={{
-                      __html: learning.selectedSection.content
-                        .replace(/\n/g, "<br />")
-                        .replace(
-                          /``````([\s\S]*?)``````/g,
-                          '<pre class="not-prose bg-muted p-4 rounded-lg overflow-x-auto">ode classss="text-sm">$1</code></pre>'
-                        )
-                        .replace(
-                          /`([^`]+)`/g,
-                          'ode class="bg-muted px-1 py-0.5 rounded text-smsm">$1</code>'
-                        ),
+                      __html: toHtmlContent(learning.selectedSection.content),
                     }}
                   />
                 )}

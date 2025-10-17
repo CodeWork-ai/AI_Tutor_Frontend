@@ -190,6 +190,16 @@ export function Companions() {
     });
   };
 
+  // Normalize many possible role values from VAPI/backend into 'user'|'assistant'
+  const normalizeRole = (rawRole: any) => {
+    if (!rawRole) return 'user';
+    const r = String(rawRole).toLowerCase();
+    // common assistant labels
+    if (r === 'assistant' || r === 'bot' || r === 'system' || r === 'ai') return 'assistant';
+    // anything else treat as user
+    return 'user';
+  };
+
   const handleStartSession = async (companionId: string) => {
     setSessionStatus('connecting');
     setActiveCompanionId(companionId);
@@ -271,9 +281,10 @@ export function Companions() {
         else if (message.type === 'conversation-update') {
           const conversation = message.conversation || [];
           const lastMessage = conversation[conversation.length - 1];
-          
+
           if (lastMessage && lastMessage.content) {
-            addToTranscript(lastMessage.role, lastMessage.content);
+            const role = normalizeRole(lastMessage.role || lastMessage.speaker || lastMessage.author);
+            addToTranscript(role, lastMessage.content);
           }
         }
         // Handle function-call messages (skip these)
@@ -757,10 +768,10 @@ export function Companions() {
                                   <div className={`flex-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                                     <div className={`inline-block px-4 py-2 rounded-2xl max-w-[85%] ${
                                       msg.role === 'user'
-                                        ? 'bg-blue-500 text-white'
+                                        ? 'bg-blue-500 text-black'
                                         : 'bg-muted text-foreground'
                                     }`}>
-                                      <p className="text-sm whitespace-pre-wrap break-words">
+                                      <p className="text-sm blackspace-pre-wrap break-words">
                                         {msg.content}
                                       </p>
                                     </div>

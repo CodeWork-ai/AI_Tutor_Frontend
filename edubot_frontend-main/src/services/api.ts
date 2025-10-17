@@ -63,6 +63,22 @@ export interface QuizGenerationResponse {
   questions: QuizQuestion[];
   section_id: string;
   course_id: string;
+  total_questions: number;
+}
+
+// NEW: Quiz submission interface
+export interface QuizSubmissionResponse {
+  score: number;
+  totalQuestions: number;
+  passed: boolean;
+  percentage: number;
+  results: Array<{
+    question_id: string;
+    question: string;
+    user_answer: string;
+    correct_answer: string;
+    is_correct: boolean;
+  }>;
 }
 
 // ========================
@@ -659,6 +675,13 @@ class ApiService {
     return headers;
   }
 
+  getUserId(): string {
+    if (!this.currentUser) {
+      throw new Error('User not authenticated');
+    }
+    return this.currentUser.id;
+  }
+
   getCurrentUser(): User | null {
     return this.currentUser;
   }
@@ -895,7 +918,7 @@ class ApiService {
   }
 
   // ========================
-  // COURSES (13 endpoints - added quiz generation)
+  // COURSES (14 endpoints - UPDATED with quiz submission)
   // ========================
 
   async generateCompleteCourse(courseTitle: string, educationLevel = 'Middle/High School'): Promise<Blob> {
@@ -1127,7 +1150,7 @@ class ApiService {
 
   /**
    * Generate quiz for a specific section
-   * Returns 4 MCQ questions and 1 True/False question
+   * Returns 5 quiz questions based on section content
    */
   async generateSectionQuiz(courseId: string, sectionId: string): Promise<QuizGenerationResponse> {
     if (!this.currentUser) {
@@ -1145,6 +1168,39 @@ class ApiService {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to generate quiz');
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Submit quiz answers for validation
+   * @param courseId - The course ID
+   * @param sectionId - The section ID
+   * @param answers - Object with question_id as key and selected answer as value
+   * @returns Quiz results with score and validation
+   */
+  async submitSectionQuiz(
+    courseId: string,
+    sectionId: string,
+    answers: { [key: string]: string }
+  ): Promise<QuizSubmissionResponse> {
+    if (!this.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const response = await fetch(
+      `${this.baseUrl}/api/courses/${courseId}/sections/${sectionId}/quiz/submit?userid=${this.currentUser.id}`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ answers }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to submit quiz');
     }
 
     return response.json();

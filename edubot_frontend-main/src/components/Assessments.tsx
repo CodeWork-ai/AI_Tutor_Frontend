@@ -120,7 +120,7 @@ export function Assessments() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="size-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
-                <ClipboardList className="size-6 text-white" />
+                <ClipboardList className="size-6 text-green" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">

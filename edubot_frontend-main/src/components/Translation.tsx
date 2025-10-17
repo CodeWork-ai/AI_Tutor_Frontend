@@ -119,7 +119,7 @@ export function Translation() {
         <div className="p-6">
           <div className="flex items-center gap-3">
             <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg">
-              <Languages className="size-6 text-white" />
+              <Languages className="size-6 text-green" />
             </div>
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">

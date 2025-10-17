@@ -7,23 +7,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Loader2, Mail, CheckCircle, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
+import axios, { AxiosError } from 'axios';
 
 interface ForgotProps {
   onBackToLogin: () => void;
-  onReset?: (email: string) => void;
 }
 
-const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
+interface ApiErrorResponse {
+  message?: string;
+  error?: string;
+  detail?: string;
+}
+
+const Forgot: React.FC<ForgotProps> = ({ onBackToLogin }) => {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Email validation
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+
+    // Validation
+    if (!trimmedEmail) {
       setError('Please enter your email address');
+      return;
+    }
+
+    if (!validateEmail(trimmedEmail)) {
+      setError('Please enter a valid email address');
       return;
     }
 
@@ -32,38 +52,59 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
     setSuccess(false);
 
     try {
-      await apiService.requestPasswordReset(email.trim());
+      await apiService.requestPasswordReset(trimmedEmail);
       
-      // SUCCESS: Show success state
+      // SUCCESS: Always show success message (security best practice - prevents email enumeration)
       setSuccess(true);
       setError(null);
       
-      // Show ONE success toast with a unique ID to prevent duplicates
-      toast.success('Reset link sent! Check your inbox.', {
-        id: `password-reset-${email.trim()}`,
+      // Show success toast with unique ID to prevent duplicates
+      toast.success('Reset link sent! Check your inbox and spam folder.', {
+        id: `password-reset-success-${trimmedEmail}-${Date.now()}`,
         duration: 5000,
       });
       
-      // Call onReset callback ONLY if provided (parent can handle navigation if needed)
-      // Remove any toast calls from the parent component
-      if (onReset) {
-        onReset(email.trim());
-      }
-      
-      // Keep email in state for display in success message
-      
     } catch (err) {
-      // ERROR: Handle and show error
-      let errorMessage = 'Failed to send reset link. Please try again.';
+      // ERROR HANDLING: Proper Axios error handling
+      let errorMessage = 'Unable to process your request. Please try again later.';
       
-      if (err instanceof Error) {
+      // Handle Axios errors properly
+      if (axios.isAxiosError(err)) {
+        const axiosError = err as AxiosError<ApiErrorResponse>;
+        
+        if (axiosError.response) {
+          // Server responded with error
+          const responseData = axiosError.response.data;
+          
+          // Extract error message from various possible formats
+          errorMessage = 
+            responseData?.message || 
+            responseData?.error || 
+            responseData?.detail ||
+            `Server error: ${axiosError.response.status}`;
+          
+          // Handle specific status codes
+          if (axiosError.response.status === 429) {
+            errorMessage = 'Too many requests. Please try again in a few minutes.';
+          } else if (axiosError.response.status === 500) {
+            errorMessage = 'Server error. Please try again later.';
+          }
+        } else if (axiosError.request) {
+          // Request made but no response received
+          errorMessage = 'No response from server. Check your internet connection.';
+        } else {
+          // Error in request configuration
+          errorMessage = axiosError.message || 'Failed to send request.';
+        }
+      } else if (err instanceof Error) {
+        // Generic Error object
         errorMessage = err.message;
       }
       
       setError(errorMessage);
       setSuccess(false);
       
-      // Show ONE error toast with a unique ID
+      // Show error toast with unique ID
       toast.error(errorMessage, {
         id: `password-reset-error-${Date.now()}`,
         duration: 5000,
@@ -117,7 +158,7 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
           {!success ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
+                <Label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   Email address
                 </Label>
                 <Input
@@ -131,20 +172,24 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
                   }}
                   required
                   disabled={submitting}
-                  className="focus:ring-emerald-500 focus:border-emerald-500"
+                  className="focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
                   autoFocus
+                  autoComplete="email"
                 />
               </div>
 
               {error && (
-                <div className="text-red-600 dark:text-red-400 text-sm text-center p-3 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-200 dark:border-red-800">
+                <div 
+                  className="text-red-600 dark:text-red-400 text-sm p-3 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-200 dark:border-red-800"
+                  role="alert"
+                >
                   {error}
                 </div>
               )}
 
               <Button 
                 type="submit" 
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium shadow-md"
+                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium shadow-md transition-all"
                 disabled={submitting || !email.trim()}
               >
                 {submitting ? (
@@ -159,6 +204,10 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
                   </>
                 )}
               </Button>
+
+              <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2">
+                You'll receive an email with instructions to reset your password.
+              </p>
             </form>
           ) : (
             <div className="space-y-4">
@@ -167,26 +216,30 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
                 <p className="text-sm text-green-700 dark:text-green-300 font-medium mb-2">
                   Email sent successfully!
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-400">
-                  If you don't see it, check your spam folder.
+                <p className="text-xs text-green-600 dark:text-green-400 mb-3">
+                  Click the link in the email to create a new password.
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  The link will expire in 1 hour for security reasons.
                 </p>
               </div>
               
               <Button 
                 variant="outline" 
-                className="w-full border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                className="w-full border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-600 dark:text-emerald-400 dark:hover:bg-emerald-950 transition-all"
                 onClick={handleSendAnother}
               >
+                <Mail className="mr-2 h-4 w-4" />
                 Send another link
               </Button>
             </div>
           )}
 
-          <div className="text-center pt-2">
+          <div className="text-center pt-2 border-t border-gray-200 dark:border-gray-700 mt-4">
             <Button
               variant="link"
               type="button"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               onClick={onBackToLogin}
               disabled={submitting}
             >

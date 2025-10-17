@@ -404,7 +404,7 @@ export function Companions() {
         <div className="p-6">
           <div className="flex items-center gap-3">
             <div className="size-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
-              <BrainCircuit className="size-6 text-white" />
+              <BrainCircuit className="size-6 text-green" />
             </div>
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
@@ -598,7 +598,7 @@ export function Companions() {
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="size-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-md">
-                                  <User className="size-6 text-white" />
+                                  <User className="size-6 text-green" />
                                 </div>
                                 <div>
                                   <CardTitle className="text-lg">{companion.name}</CardTitle>
@@ -791,7 +791,7 @@ export function Companions() {
                             className="flex gap-3 items-center mt-4"
                           >
                             <div className="size-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                              <UserCircle className="size-5 text-white" />
+                              <UserCircle className="size-5 text-green" />
                             </div>
                             <div className="bg-muted px-4 py-2 rounded-2xl">
                               <div className="flex gap-1">

@@ -1,0 +1,160 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+dist/
+build/
+develop-eggs/
+.eggs/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+noxfile_*.py
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+test-results/
+
+# Cython debug symbols
+cython_debug/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+build/
+
+# PyBuilder
+target/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Pytype
+.pytype/
+
+# Pyright
+typings/
+
+# VS Code, PyCharm, and IDE files
+.vscode/
+.idea/
+*.sublime-workspace
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+
+
+# Alembic migration folder cache
+alembic/versions/*.pyc
+
+# Local SQLite
+*.sqlite3
+*.db
+
+# Log files
+*.log
+
+# Mac OS, Windows, Linux
+.DS_Store
+*.swp
+*.bak
+Thumbs.db
+
+# Project-specific cache
+__pypackages__/
+.edubot_cache/
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.temp/
+.cache/
+*.log
+
+# Dependency directories
+jspm_packages/
+
+
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+*.swp
+*.lock
+*.pid
+*.seed
+*.pid.lock
+
+# Optional: if using eslint or prettier cache
+.eslintcache
+.prettiercache
+
+# Optional: if using storybook
+.storybook-out/

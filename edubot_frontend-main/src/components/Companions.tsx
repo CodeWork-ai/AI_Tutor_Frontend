@@ -386,16 +386,17 @@ export function Companions() {
     ? Object.entries(voices.voices).flatMap(([provider, voiceData]) => Object.keys(voiceData))
     : DEFAULT_VOICES;
 
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
-        <div className="text-center">
-          <Loader2 className="size-12 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground text-lg">Loading companions...</p>
-        </div>
+if (isLoading) {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
+      <div className="text-center">
+        <Loader2 className="size-12 animate-spin mx-auto mb-4 text-primary" />
+        <p className="text-muted-foreground text-lg">Loading companions...</p>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
 
   return (
     <div className="flex-1 flex flex-col h-full bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
@@ -560,7 +561,9 @@ export function Companions() {
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="flex flex-col items-center justify-center min-h-[500px] text-center"
+                    // Center vertically in viewport (accounting for header) so placeholder appears centered
+                    className="flex flex-col items-center justify-center text-center"
+                    style={{ minHeight: 'calc(100vh - 8rem)' }}
                   >
                     <div className="size-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-6 shadow-lg">
                       <BrainCircuit className="size-12 text-white" />
@@ -585,7 +588,9 @@ export function Companions() {
                     </div>
                   </motion.div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  // Make the companions list scrollable independently so long lists don't affect the page scroll
+                  <div className="h-[calc(100vh-8rem)] overflow-auto pr-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {companions.map((companion) => (
                       <motion.div
                         key={companion.id}
@@ -709,6 +714,7 @@ export function Companions() {
                         </Card>
                       </motion.div>
                     ))}
+                    </div>
                   </div>
                 )}
               </div>

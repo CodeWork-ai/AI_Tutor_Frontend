@@ -105,7 +105,9 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
 
   return (
     <div className="w-60 bg-sidebar border-r border-sidebar-border flex flex-col">
-      <div className="p-4 flex-1">
+      {/* Make this container scrollable */}
+      <div className="p-4 flex flex-col h-full overflow-y-auto">
+        {/* Logo & App Info */}
         <div className="flex items-center gap-3 mb-6">
           <div className="size-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
             <span className="text-white font-bold text-lg">E</span>
@@ -115,12 +117,13 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
             <p className="text-xs text-sidebar-foreground/70">AI Academic Tutor</p>
           </div>
         </div>
-        
+
+        {/* Navigation Tabs */}
         <nav className="space-y-1">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = currentTab === tab.id;
-            
+
             return (
               <Button
                 key={tab.id}

@@ -184,7 +184,7 @@ function App() {
           <Route path="/" element={<MainApp />} />
           
           {/* Catch all - redirect to home */}
-          <Route path="https://happy-stone-0fd6e2100.3.azurestaticapps.net/*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster />
       </BrowserRouter>

@@ -135,7 +135,7 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin }) => {
               }`}
             >
               {success ? (
-                <CheckCircle className="size-6 text-white" />
+                <CheckCircle className="size-6 text-green" />
               ) : (
                 <Mail className="size-6 text-white" />
               )}

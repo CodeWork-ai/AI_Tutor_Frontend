@@ -10,6 +10,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // default duration for all toasts (milliseconds)
+      duration={500}
       style={
         {
           "--normal-bg": "var(--popover)",

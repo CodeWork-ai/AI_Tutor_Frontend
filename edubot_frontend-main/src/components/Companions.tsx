@@ -1,4 +1,4 @@
-// src/components/Companions.tsx - FIXED DUPLICATE MESSAGES
+// src/components/Companions.tsx - FIXED DUPLICATE MESSAGES & VOICE DROPDOWN
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
@@ -454,8 +454,9 @@ export function Companions() {
     }
   };
 
+  // FIXED: Remove duplicate voices using Set
   const voiceOptions = voices?.voices 
-    ? Object.entries(voices.voices).flatMap(([provider, voiceData]) => Object.keys(voiceData))
+    ? [...new Set(Object.entries(voices.voices).flatMap(([provider, voiceData]) => Object.keys(voiceData)))]
     : DEFAULT_VOICES;
 
   if (isLoading) {
@@ -476,7 +477,7 @@ export function Companions() {
         <div className="p-6">
           <div className="flex items-center gap-3">
             <div className="size-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
-              <BrainCircuit className="size-6 text-white" />
+              <BrainCircuit className="size-6 text-green" />
             </div>
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
@@ -632,12 +633,11 @@ export function Companions() {
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    // Center vertically in viewport (accounting for header) so placeholder appears centered
                     className="flex flex-col items-center justify-center text-center"
                     style={{ minHeight: 'calc(100vh - 8rem)' }}
                   >
                     <div className="size-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-6 shadow-lg">
-                      <BrainCircuit className="size-12 text-white" />
+                      <BrainCircuit className="size-12 text-green" />
                     </div>
                     <h3 className="text-2xl font-bold mb-2">No Companions Yet</h3>
                     <p className="text-muted-foreground max-w-md mb-6">
@@ -659,7 +659,6 @@ export function Companions() {
                     </div>
                   </motion.div>
                 ) : (
-                  // Make the companions list scrollable independently so long lists don't affect the page scroll
                   <div className="h-[calc(100vh-8rem)] overflow-auto pr-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {companions.map((companion) => (
@@ -674,7 +673,7 @@ export function Companions() {
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="size-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-md">
-                                  <User className="size-6 text-white" />
+                                  <User className="size-6 text-green" />
                                 </div>
                                 <div>
                                   <CardTitle className="text-lg">{companion.name}</CardTitle>
@@ -712,14 +711,12 @@ export function Companions() {
                               </div>
                             </div>
 
-                            <Separator />
-
                             <div className="flex flex-col gap-4">
                               {/* Past Sessions List */}
                               {pastSessions
                                 .filter(session => session.companion_id === companion.id)
                                 .sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime())
-                                .slice(0, 3) // Show last 3 sessions
+                                .slice(0, 3)
                                 .map(session => (
                                   <div key={session.session_id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg text-sm">
                                     <div className="flex-1">
@@ -842,7 +839,6 @@ export function Companions() {
                               <div className="size-2 rounded-full bg-green-500 animate-pulse" />
                               {transcript.length}
                             </Badge>
-                            {/* Add End Session control in header so it's always reachable */}
                             <Button
                               variant="destructive"
                               size="sm"
@@ -890,18 +886,18 @@ export function Companions() {
                                       : 'bg-gradient-to-br from-purple-500 to-pink-600'
                                   }`}>
                                     {msg.role === 'user' ? (
-                                      <UserCircle className="size-5 text-white" />
+                                      <UserCircle className="size-5 text-green" />
                                     ) : (
-                                      <Bot className="size-5 text-white" />
+                                      <Bot className="size-5 text-gree" />
                                     )}
                                   </div>
                                   <div className={`flex-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                                     <div className={`inline-block px-4 py-2 rounded-2xl max-w-[85%] ${
                                       msg.role === 'user'
-                                        ? 'bg-blue-500 text-black'
+                                        ? 'bg-blue-500 text-green'
                                         : 'bg-muted text-foreground'
                                     }`}>
-                                      <p className="text-sm blackspace-pre-wrap break-words">
+                                      <p className="text-sm whitespace-pre-wrap break-words">
                                         {msg.content}
                                       </p>
                                     </div>
@@ -921,7 +917,7 @@ export function Companions() {
                             className="flex gap-3 items-center mt-4"
                           >
                             <div className="size-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                              <UserCircle className="size-5 text-white" />
+                              <UserCircle className="size-5 text-green" />
                             </div>
                             <div className="bg-muted px-4 py-2 rounded-2xl">
                               <div className="flex gap-1">

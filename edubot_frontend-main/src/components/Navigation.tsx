@@ -15,6 +15,8 @@ import {
   BrainCircuit      // ADDED
 } from 'lucide-react';
 
+import { User } from '../services/api';
+
 export type NavigationTab = 
   | 'chat' 
   | 'courses' 
@@ -31,9 +33,11 @@ export type NavigationTab =
 interface NavigationProps {
   currentTab: NavigationTab;
   onTabChange: (tab: NavigationTab) => void;
+  user?: User | null;
+  onLogout?: () => void;
 }
 
-export function Navigation({ currentTab, onTabChange }: NavigationProps) {
+export function Navigation({ currentTab, onTabChange, user, onLogout }: NavigationProps) {
   const tabs = [
     { 
       id: 'chat' as NavigationTab, 
@@ -104,9 +108,9 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
   ];
 
   return (
-    <div className="w-60 bg-sidebar border-r border-sidebar-border flex flex-col">
+    <div className="w-60 bg-sidebar border-r border-sidebar-border flex flex-col min-h-0">
       {/* Scrollable area for nav items (use flex-1 so footer stays visible) */}
-      <div className="p-4 flex flex-col flex-1 overflow-y-auto">
+      <div className="p-4 flex flex-col flex-1 overflow-y-auto h-full">
         {/* Logo & App Info */}
         <div className="flex items-center gap-3 mb-6">
           <div className="size-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
@@ -146,20 +150,21 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
         </nav>
       </div>
 
-      {/* Footer: user info + quick actions. Kept outside the scrollable area so it never overlaps nav items */}
+      {/* Footer: compact user badge + quick actions */}
       <div className="p-3 border-t border-sidebar-border bg-sidebar">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center text-white font-semibold">U</div>
-            <div className="min-w-0">
-              <div className="text-sm font-medium truncate">Username</div>
-              <div className="text-xs text-sidebar-foreground/60 truncate">user@example.com</div>
+            <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center text-white font-semibold flex-shrink-0">
+              {user ? (user.first_name?.charAt(0) || user.email?.charAt(0) || 'U') : 'U'}
+            </div>
+            <div className="min-w-0 overflow-hidden">
+              <div className="text-sm font-medium truncate leading-tight">{user ? (user.first_name || user.email?.split('@')[0]) : 'Guest'}</div>
+              <div className="text-xs text-sidebar-foreground/60 truncate">{user?.email || ''}</div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" className="px-2 py-1 text-xs">Settings</Button>
-            <Button variant="ghost" className="px-2 py-1 text-xs text-red-500">Logout</Button>
+            <Button variant="ghost" className="px-2 py-1 text-xs text-red-500" onClick={() => onLogout && onLogout()}>Logout</Button>
           </div>
         </div>
       </div>

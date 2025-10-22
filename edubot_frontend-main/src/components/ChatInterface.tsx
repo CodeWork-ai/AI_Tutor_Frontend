@@ -31,6 +31,8 @@ export function ChatInterface({}: ChatInterfaceProps) {
   const [typingMessageIndex, setTypingMessageIndex] = useState<number | null>(null);
   // per-chat typing index (so other chats can be typing in background)
   const [typingIndexByChat, setTypingIndexByChat] = useState<Record<string, number | null>>({});
+  // per-chat typing character progress to allow resuming where left off
+  const [typingProgressByChat, setTypingProgressByChat] = useState<Record<string, number>>({});
   const typingTimersRef = useRef<Record<string, number | null>>({});
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -50,6 +52,8 @@ export function ChatInterface({}: ChatInterfaceProps) {
       if (cached) {
         setMessages(cached);
         setTypingMessageIndex(typingIndexByChat[currentChatId] ?? null);
+        // ensure typing progress exists for this chat (default 0)
+        setTypingProgressByChat(p => ({ ...p, [currentChatId!]: p[currentChatId!] ?? 0 }));
       } else {
         loadChatHistory();
       }
@@ -240,17 +244,23 @@ export function ChatInterface({}: ChatInterfaceProps) {
         // persist per-chat
         const chatKey = currentChatId || response.reply.chat_id || '__new__';
         setMessagesByChat(m => ({ ...m, [chatKey]: newMessages }));
-        // set per-chat typing index
-        setTypingIndexByChat(t => ({ ...t, [chatKey]: newMessages.length - 1 }));
-        // if this chat is active, show typing indicator
+        // If this chat is active, enable typing visuals and progress tracking
         if (chatKey === currentChatId) {
+          // set per-chat typing index
+          setTypingIndexByChat(t => ({ ...t, [chatKey]: newMessages.length - 1 }));
+          // ensure typing progress is initialized only if not present
+          setTypingProgressByChat(p => ({ ...p, [chatKey]: p[chatKey] ?? 0 }));
           setTypingMessageIndex(newMessages.length - 1);
         } else {
-          // Start a background timer to simulate typing completion for non-active chat
+          // Option A: Do NOT show background typing visuals.
+          // Mark the background chat's progress as complete immediately so when the user returns
+          // they see the full assistant response instead of a typing animation.
+          setTypingIndexByChat(t => ({ ...t, [chatKey]: null }));
+          setTypingProgressByChat(p => ({ ...p, [chatKey]: (assistantMessage.content || '').length }));
+
+          // Start a background timer only for the toast/notification. If the user switches
+          // back before the timer fires, they will already see the full message.
           const timerId = window.setTimeout(() => {
-            // clear per-chat typing index
-            setTypingIndexByChat(prev => ({ ...prev, [chatKey]: null }));
-            // show notification for background chat completion
             toast.success('Response ready in background');
             delete typingTimersRef.current[chatKey];
           }, 2500 + Math.min(5000, (assistantMessage.content || '').length * 10));
@@ -289,10 +299,12 @@ export function ChatInterface({}: ChatInterfaceProps) {
 
     // Clear per-chat typing index and notify for the chat that finished
     const chatKey = currentChatId || '__new__';
-    setTypingIndexByChat(prev => {
-      const next = { ...prev, [chatKey]: null };
-      return next;
-    });
+    setTypingIndexByChat(prev => ({ ...prev, [chatKey]: null }));
+    // set typing progress to full length for this chat so resuming doesn't restart
+    const message = messages[typingMessageIndex ?? -1];
+    if (message) {
+      setTypingProgressByChat(prev => ({ ...prev, [chatKey]: (message.content || '').length }));
+    }
 
     // Scroll only if user is at bottom or for the active chat
     if (autoScrollEnabled) scrollToBottom();
@@ -311,6 +323,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
     // Clear any cached draft messages for the '__new__' key
     setMessagesByChat(prev => ({ ...prev, ['__new__']: [] }));
     setTypingIndexByChat(prev => ({ ...prev, ['__new__']: null }));
+    setTypingProgressByChat(prev => ({ ...prev, ['__new__']: 0 }));
   };
 
   const handleChatSelect = (chatId: string) => {
@@ -325,6 +338,8 @@ export function ChatInterface({}: ChatInterfaceProps) {
       }
     } catch (e) {}
 
+    // also ensure typing progress exists for the chat we're switching to
+    setTypingProgressByChat(p => ({ ...p, [chatId]: p[chatId] ?? 0 }));
     setCurrentChatId(chatId);
   };
 
@@ -523,6 +538,13 @@ export function ChatInterface({}: ChatInterfaceProps) {
                     isTyping={isCurrentlyTyping}
                     onTypingProgress={handleTypingProgress}
                     onTypingComplete={handleTypingComplete}
+                    // provide initial typing index from per-chat progress
+                    initialTypingIndex={typingProgressByChat[currentChatId || '__new__'] ?? 0}
+                    onTypingProgressChar={(newIndex: number) => {
+                      // persist per-chat typing progress for active chat
+                      const chatKey = currentChatId || '__new__';
+                      setTypingProgressByChat(prev => ({ ...prev, [chatKey]: newIndex }));
+                    }}
                   />
                 );
               })}

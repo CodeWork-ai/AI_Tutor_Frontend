@@ -16,6 +16,10 @@ interface ChatMessageProps {
   isTyping?: boolean;
   onTypingComplete?: () => void;
   onTypingProgress?: () => void;
+  // starting character index for typing effect
+  initialTypingIndex?: number;
+  // callback that receives the new character index as typing progresses
+  onTypingProgressChar?: (newIndex: number) => void;
 }
 
 
@@ -26,6 +30,7 @@ export function ChatMessage({
   isTyping = false, 
   onTypingComplete, 
   onTypingProgress 
+  , initialTypingIndex = 0, onTypingProgressChar
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
   
@@ -53,8 +58,13 @@ export function ChatMessage({
               <TypingEffect 
                 text={message.content}
                 speed={20}
+                initialIndex={initialTypingIndex}
                 onComplete={onTypingComplete}
-                onProgress={onTypingProgress}
+                onProgress={() => {
+                  onTypingProgress?.();
+                  // notify parent with new index (we approximate by calling onTypingProgressChar)
+                  onTypingProgressChar?.((initialTypingIndex || 0) + 1);
+                }}
               />
             ) : (
               <>

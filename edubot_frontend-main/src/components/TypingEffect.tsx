@@ -5,11 +5,13 @@ interface TypingEffectProps {
   speed?: number;
   onComplete?: () => void;
   onProgress?: () => void;
+  // Start from this character index (useful for resuming)
+  initialIndex?: number;
 }
 
-export function TypingEffect({ text, speed = 70, onComplete, onProgress }: TypingEffectProps) {
+export function TypingEffect({ text, speed = 70, onComplete, onProgress, initialIndex = 0 }: TypingEffectProps) {
   const [displayText, setDisplayText] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
   useEffect(() => {
     if (currentIndex < text.length) {
@@ -25,11 +27,12 @@ export function TypingEffect({ text, speed = 70, onComplete, onProgress }: Typin
     }
   }, [currentIndex, text, speed, onComplete, onProgress]);
 
-  // Reset when text changes
+  // Initialize / reset when text or initialIndex changes
   useEffect(() => {
-    setDisplayText('');
-    setCurrentIndex(0);
-  }, [text]);
+    const start = Math.max(0, Math.min(initialIndex, text.length));
+    setDisplayText(text.slice(0, start));
+    setCurrentIndex(start);
+  }, [text, initialIndex]);
 
   return (
     <span className="whitespace-pre-wrap break-words leading-relaxed">

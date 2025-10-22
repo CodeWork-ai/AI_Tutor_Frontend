@@ -140,32 +140,13 @@ function MainApp() {
 
   return (
     <div className="h-screen flex bg-background text-foreground overflow-hidden mt-10">
-      <Navigation currentTab={currentTab} onTabChange={handleTabChange} />
+      <Navigation currentTab={currentTab} onTabChange={handleTabChange} user={currentUser} onLogout={handleLogout} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div className="flex-1 overflow-hidden">
           {renderContent()}
         </div>
       </div>
-
-      {/* User Info & Logout */}
-      <div className="fixed bottom-4 left-4 z-50" style={{ left: '1rem' }}>
-        <div className="bg-sidebar border border-sidebar-border rounded-lg px-3 py-2 text-xs flex items-center gap-2 shadow-lg">
-          <div className="size-6 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
-            <span className="text-white text-xs font-medium">
-              {getUserInitials(currentUser)}
-            </span>
-          </div>
-          <span className="text-sidebar-foreground font-medium">
-            {getUserDisplayName(currentUser)}
-          </span>
-          <button
-            onClick={handleLogout}
-            className="text-sidebar-foreground/70 hover:text-sidebar-foreground ml-2 underline text-xs hover:text-red-600 transition-colors"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+      {/* User UI moved into Navigation footer to avoid overlap */}
     </div>
   );
 }

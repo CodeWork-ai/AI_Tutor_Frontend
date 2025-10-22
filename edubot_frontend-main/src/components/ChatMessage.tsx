@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 
+
 interface ChatMessageProps {
   message: {
     role: 'user' | 'assistant';
@@ -16,33 +17,27 @@ interface ChatMessageProps {
   isTyping?: boolean;
   onTypingComplete?: () => void;
   onTypingProgress?: () => void;
-  // starting character index for typing effect
-  initialTypingIndex?: number;
-  // callback that receives the new character index as typing progresses
-  onTypingProgressChar?: (newIndex: number) => void;
 }
+
 
 
 export function ChatMessage({ 
   message, 
   suggestions = [], 
   onSuggestionClick,
-  isTyping: explicitIsTyping, // The isTyping prop passed from parent
+  isTyping = false,
   onTypingComplete, 
   onTypingProgress 
-  , initialTypingIndex = 0, onTypingProgressChar
 }: ChatMessageProps) {
-  // Enable typing by default for assistant messages, unless explicitly disabled
-  const isTyping = !message.role || message.role === 'assistant' ? (explicitIsTyping !== false) : false;
   const isUser = message.role === 'user';
   
-  // Debug log to track suggestions
-  console.log('💬 ChatMessage:', {
+  // Debug log
+  console.log('💬 ChatMessage render:', {
     role: message.role,
     isTyping,
     hasSuggestions: suggestions && suggestions.length > 0,
     suggestionsCount: suggestions?.length,
-    suggestions
+    contentLength: message.content?.length
   });
   
   return (
@@ -60,18 +55,13 @@ export function ChatMessage({
               <TypingEffect 
                 text={message.content}
                 speed={20}
-                initialIndex={initialTypingIndex}
                 onComplete={onTypingComplete}
-                onProgress={() => {
-                  onTypingProgress?.();
-                  // notify parent with new index (we approximate by calling onTypingProgressChar)
-                  onTypingProgressChar?.((initialTypingIndex || 0) + 1);
-                }}
+                onProgress={onTypingProgress}
               />
             ) : (
               <>
                 {isUser ? (
-                  // For user messages, just show plain text
+                  // For user messages, show plain text
                   <div className="whitespace-pre-wrap break-words leading-relaxed text-sm">
                     {message.content}
                   </div>
@@ -204,7 +194,7 @@ export function ChatMessage({
                   </div>
                 )}
                 
-                {/* FIXED: Only show suggestions for assistant messages, when NOT typing, and when suggestions exist */}
+                {/* Show suggestions only for assistant messages when NOT typing */}
                 {!isUser && !isTyping && suggestions && suggestions.length > 0 && (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {suggestions.map((suggestion, index) => (
@@ -214,7 +204,7 @@ export function ChatMessage({
                           console.log('🎯 Suggestion clicked:', suggestion);
                           onSuggestionClick?.(suggestion);
                         }}
-                        className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 text-muted-foreground rounded-lg transition-colors border border-border/50 hover:border-primary/50"
+                        className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 text-muted-foreground rounded-lg transition-colors border border-border/50 hover:border-primary/50 hover:text-foreground"
                       >
                         {suggestion}
                       </button>

@@ -792,7 +792,8 @@ class ApiService {
 
     const payload = {
       ...messageData,
-      user_id: this.currentUser.id
+      user_id: this.currentUser.id,
+      context: 'general' // Allow general conversations
     };
 
     const response = await fetch(`${this.baseUrl}/api/chat/`, {

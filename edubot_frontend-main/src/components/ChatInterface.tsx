@@ -10,67 +10,69 @@ import { FileUpload } from './FileUpload';
 import { apiService, ChatMessage as ChatMessageType, Chat } from '../services/api';
 import { toast } from 'sonner';
 
-// Extended ChatMessage type with optional id property
+
+// Extended ChatMessage type
 interface ExtendedChatMessage extends ChatMessageType {
   id?: string;
   isTyping?: boolean;
+  isNew?: boolean;
 }
 
+
 interface ChatInterfaceProps {}
+
 
 export function ChatInterface({}: ChatInterfaceProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | undefined>();
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
-  // Persist messages per chat so background typing can continue
   const [messagesByChat, setMessagesByChat] = useState<Record<string, ExtendedChatMessage[]>>({});
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; id: string }>>([]);
   const [educationLevel, setEducationLevel] = useState('school');
-  const [typingMessageIndex, setTypingMessageIndex] = useState<number | null>(null);
-  // per-chat typing index (so other chats can be typing in background)
-  const [typingIndexByChat, setTypingIndexByChat] = useState<Record<string, number | null>>({});
-  // per-chat typing character progress to allow resuming where left off
-  const [typingProgressByChat, setTypingProgressByChat] = useState<Record<string, number>>({});
-  const typingTimersRef = useRef<Record<string, number | null>>({});
+  
+  // ⭐ CRITICAL: Track completed typing per chat - persists across renders and chat switches
+  const completedTypingRef = useRef<Record<string, Set<string>>>({}); // chatId -> Set of completed message IDs
+  
+  // Store suggestions in ref to persist across re-renders
+  const suggestionsMapRef = useRef<Map<string, string[]>>(new Map());
+  
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
-  
-  // FIXED: Store suggestions in ref to persist across re-renders
-  const suggestionsMapRef = useRef<Map<string, string[]>>(new Map());
+
 
   useEffect(() => {
     loadChats();
   }, []);
 
+
   useEffect(() => {
     if (currentChatId) {
-      // If we have cached messages for this chat, use them immediately
       const cached = messagesByChat[currentChatId];
       if (cached) {
+        console.log('📋 Loading cached messages for chat:', currentChatId);
         setMessages(cached);
-        setTypingMessageIndex(typingIndexByChat[currentChatId] ?? null);
-        // ensure typing progress exists for this chat (default 0)
-        setTypingProgressByChat(p => ({ ...p, [currentChatId!]: p[currentChatId!] ?? 0 }));
       } else {
+        console.log('🔄 Loading chat history from server for:', currentChatId);
         loadChatHistory();
       }
     } else {
-      // New chat view: show any unsent temp messages cached under '__new__'
+      // New chat view
       const cachedNew = messagesByChat['__new__'] || [];
       setMessages(cachedNew);
       setUploadedFiles([]);
-      setTypingMessageIndex(null);
-      suggestionsMapRef.current.clear(); // Clear suggestions when starting new chat
+      suggestionsMapRef.current.clear();
     }
   }, [currentChatId]);
+
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -78,6 +80,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
     }
   }, [inputValue]);
+
 
   const loadChats = async () => {
     try {
@@ -90,6 +93,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
     }
   };
 
+
   const loadChatHistory = async () => {
     if (!currentChatId) return;
     
@@ -100,6 +104,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
         return;
       }
 
+
       const response = await apiService.getChatHistory(user.id);
       
       if (response.history) {
@@ -107,17 +112,39 @@ export function ChatInterface({}: ChatInterfaceProps) {
           (msg: any) => msg.chat_id === currentChatId
         );
         
-        const formattedMessages: ExtendedChatMessage[] = chatMessages.map((msg: any) => ({
-          ...msg,
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content || msg.message || '',
-          message: msg.message || msg.content || '',
-          timestamp: msg.timestamp,
-          chat_id: msg.chat_id,
-          follow_up_suggestions: undefined
-        }));
+        const formattedMessages: ExtendedChatMessage[] = chatMessages.map((msg: any) => {
+          const messageId = msg.id || `msg-${msg.timestamp}`;
+          
+          return {
+            ...msg,
+            id: messageId,
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content || msg.message || '',
+            message: msg.message || msg.content || '',
+            timestamp: msg.timestamp,
+            chat_id: msg.chat_id,
+            follow_up_suggestions: msg.follow_up_suggestions || undefined,
+            isTyping: false, // ⭐ Historical messages NEVER type
+            isNew: false // ⭐ Not new messages
+          };
+        });
+        
+        // ⭐ CRITICAL: Mark ALL loaded messages as completed typing
+        if (!completedTypingRef.current[currentChatId]) {
+          completedTypingRef.current[currentChatId] = new Set();
+        }
+        
+        formattedMessages.forEach(msg => {
+          if (msg.id) {
+            completedTypingRef.current[currentChatId!].add(msg.id);
+            console.log(`✅ Marked message ${msg.id} as completed (loaded from history)`);
+          }
+        });
+        
+        console.log(`📚 Loaded ${formattedMessages.length} messages, all marked as completed`);
         
         setMessages(formattedMessages);
+        setMessagesByChat(prev => ({ ...prev, [currentChatId]: formattedMessages }));
       }
     } catch (error) {
       console.error('Failed to load chat history:', error);
@@ -125,52 +152,55 @@ export function ChatInterface({}: ChatInterfaceProps) {
     }
   };
 
+
   const scrollToBottom = (smooth = true) => {
     setTimeout(() => {
       if (scrollAreaRef.current) {
         const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-        if (scrollContainer) {
-          // Only auto-scroll when user hasn't scrolled up (autoScrollEnabled)
-          if (autoScrollEnabled) {
-            scrollContainer.scrollTo({
-              top: scrollContainer.scrollHeight,
-              behavior: smooth ? 'smooth' : 'auto'
-            });
-          }
+        if (scrollContainer && autoScrollEnabled) {
+          scrollContainer.scrollTo({
+            top: scrollContainer.scrollHeight,
+            behavior: smooth ? 'smooth' : 'auto'
+          });
         }
       }
     }, 10);
   };
 
-  // Watch user scroll to enable/disable auto-scrolling when they manually scroll up
+
   useEffect(() => {
     const root = scrollAreaRef.current;
     if (!root) return;
     const viewport = root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
     if (!viewport) return;
 
+
     const onScroll = () => {
-      const tolerance = 120; // px from bottom to still consider "at bottom"
+      const tolerance = 120;
       const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= tolerance;
       setAutoScrollEnabled(atBottom);
     };
 
+
     viewport.addEventListener('scroll', onScroll, { passive: true });
-    // initialize
     onScroll();
+
 
     return () => viewport.removeEventListener('scroll', onScroll);
   }, [scrollAreaRef.current]);
 
+
   const handleSendMessage = async (messageText?: string) => {
     const message = messageText || inputValue.trim();
     if (!message || isLoading) return;
+
 
     const user = apiService.getCurrentUser();
     if (!user) {
       toast.error('Please log in to send messages');
       return;
     }
+
 
     const userMessage: ExtendedChatMessage = { 
       role: 'user', 
@@ -181,47 +211,47 @@ export function ChatInterface({}: ChatInterfaceProps) {
       user_id: user.id
     };
     
-    // add to active messages and persist per-chat
     setMessages(prev => {
       const next = [...prev, userMessage];
-      if (currentChatId) {
-        setMessagesByChat(m => ({ ...m, [currentChatId]: next }));
-      } else {
-        setMessagesByChat(m => ({ ...m, ['__new__']: next }));
-      }
+      const chatKey = currentChatId || '__new__';
+      setMessagesByChat(m => ({ ...m, [chatKey]: next }));
       return next;
     });
     setInputValue('');
     setIsLoading(true);
 
+
     setTimeout(() => scrollToBottom(), 100);
+
 
     try {
       const chatMessage = {
         message: message,
-        level: educationLevel,
         chat_id: currentChatId,
         user_id: user.id
       };
 
+
       const response = await apiService.sendMessage(chatMessage);
       
-      if (!currentChatId && response.reply.chat_id) {
-        setCurrentChatId(response.reply.chat_id);
+      // ⭐ Handle new chat creation
+      const newChatId = response.reply.chat_id;
+      if (!currentChatId && newChatId) {
+        console.log('🆕 New chat created:', newChatId);
+        setCurrentChatId(newChatId);
         loadChats();
       }
 
-  const messageId = `msg-${Date.now()}`;
+
+      const messageId = `msg-${Date.now()}-${Math.random()}`;
+      const chatKey = currentChatId || newChatId || '__new__';
       const suggestions = response.reply.follow_up_suggestions || [];
       
-      // FIXED: Store suggestions in ref BEFORE adding to state
+      // Store suggestions in ref
       suggestionsMapRef.current.set(messageId, suggestions);
       
-      console.log('💾 Stored suggestions in ref:', {
-        messageId,
-        suggestions,
-        suggestionsCount: suggestions.length
-      });
+      console.log('💾 Stored suggestions:', { messageId, suggestions, count: suggestions.length });
+
 
       const assistantMessage: ExtendedChatMessage = {
         id: messageId,
@@ -229,126 +259,113 @@ export function ChatInterface({}: ChatInterfaceProps) {
         content: response.reply.content,
         message: response.reply.content,
         timestamp: new Date().toISOString(),
-        chat_id: currentChatId || response.reply.chat_id,
+        chat_id: chatKey,
         user_id: user.id,
         follow_up_suggestions: suggestions,
-        isTyping: true // Always start with typing animation
+        isTyping: true, // ⭐ Start with typing enabled
+        isNew: true // ⭐ Mark as new for typing detection
       };
+
 
       console.log('💬 Assistant message created:', {
         id: assistantMessage.id,
-        hasSuggestions: !!assistantMessage.follow_up_suggestions,
-        suggestionsCount: assistantMessage.follow_up_suggestions?.length
+        chatId: chatKey,
+        isTyping: true,
+        isNew: true
       });
+
 
       setMessages(prev => {
         const newMessages = [...prev, assistantMessage];
-        // persist per-chat
-        const chatKey = currentChatId || response.reply.chat_id || '__new__';
         setMessagesByChat(m => ({ ...m, [chatKey]: newMessages }));
-        // If this chat is active, enable typing visuals and progress tracking
-        if (chatKey === currentChatId) {
-          // set per-chat typing index
-          setTypingIndexByChat(t => ({ ...t, [chatKey]: newMessages.length - 1 }));
-          // ensure typing progress is initialized only if not present
-          setTypingProgressByChat(p => ({ ...p, [chatKey]: p[chatKey] ?? 0 }));
-          setTypingMessageIndex(newMessages.length - 1);
-        } else {
-          // Option A: Do NOT show background typing visuals.
-          // Mark the background chat's progress as complete immediately so when the user returns
-          // they see the full assistant response instead of a typing animation.
-          setTypingIndexByChat(t => ({ ...t, [chatKey]: null }));
-          setTypingProgressByChat(p => ({ ...p, [chatKey]: (assistantMessage.content || '').length }));
-
-          // Start a background timer only for the toast/notification. If the user switches
-          // back before the timer fires, they will already see the full message.
-          const timerId = window.setTimeout(() => {
-            toast.success('Response ready in background');
-            delete typingTimersRef.current[chatKey];
-          }, 2500 + Math.min(5000, (assistantMessage.content || '').length * 10));
-          typingTimersRef.current[chatKey] = timerId;
-        }
         return newMessages;
       });
+
 
     } catch (error) {
       console.error('Failed to send message:', error);
       toast.error('Failed to send message');
       
       const fallbackMessage: ExtendedChatMessage = {
+        id: `error-${Date.now()}`,
         role: 'assistant',
         content: "I'm sorry, but I'm unable to connect to the backend server.",
         timestamp: new Date().toISOString(),
         chat_id: currentChatId || 'fallback',
-        message: "I'm sorry, but I'm unable to connect to the backend server."
+        message: "I'm sorry, but I'm unable to connect to the backend server.",
+        isTyping: false,
+        isNew: false
       };
       
       setMessages(prev => [...prev, fallbackMessage]);
-      setTypingMessageIndex(null);
     } finally {
       setIsLoading(false);
     }
   };
 
+
   const handleTypingProgress = () => {
-    // Only auto-scroll if user hasn't scrolled up
     if (autoScrollEnabled) scrollToBottom();
   };
 
-  const handleTypingComplete = () => {
-    // Clear typing for active chat
-    setTypingMessageIndex(null);
 
-    // Clear per-chat typing index and notify for the chat that finished
-    const chatKey = currentChatId || '__new__';
-    setTypingIndexByChat(prev => ({ ...prev, [chatKey]: null }));
-    // set typing progress to full length for this chat so resuming doesn't restart
-    const message = messages[typingMessageIndex ?? -1];
-    if (message) {
-      setTypingProgressByChat(prev => ({ ...prev, [chatKey]: (message.content || '').length }));
+  const handleTypingComplete = (messageId: string, chatId: string) => {
+    console.log('✅ Typing completed for message:', { messageId, chatId });
+    
+    // ⭐ CRITICAL: Mark message as completed in ref (persists across renders)
+    if (!completedTypingRef.current[chatId]) {
+      completedTypingRef.current[chatId] = new Set();
     }
+    completedTypingRef.current[chatId].add(messageId);
+    
+    console.log(`✅ Added ${messageId} to completed set for chat ${chatId}`);
+    console.log(`📊 Total completed messages in this chat: ${completedTypingRef.current[chatId].size}`);
 
-    // Scroll only if user is at bottom or for the active chat
+
+    // Update message state to remove typing flags
+    const updateMessage = (msg: ExtendedChatMessage) => 
+      msg.id === messageId ? { ...msg, isTyping: false, isNew: false } : msg;
+    
+    setMessages(prev => prev.map(updateMessage));
+    
+    // Update cached messages
+    setMessagesByChat(prev => ({
+      ...prev,
+      [chatId]: (prev[chatId] || []).map(updateMessage)
+    }));
+
+
     if (autoScrollEnabled) scrollToBottom();
-
-    // Show a short toast indicating completion
-    toast.success('Response ready');
+    toast.success('Response ready', { duration: 1500 });
   };
+
 
   const handleNewChat = () => {
-    // Clear active chat and reset new-chat cache so the view is empty
+    console.log('🆕 Creating new chat');
     setCurrentChatId(undefined);
     setMessages([]);
     setUploadedFiles([]);
-    setTypingMessageIndex(null);
     suggestionsMapRef.current.clear();
-    // Clear any cached draft messages for the '__new__' key
     setMessagesByChat(prev => ({ ...prev, ['__new__']: [] }));
-    setTypingIndexByChat(prev => ({ ...prev, ['__new__']: null }));
-    setTypingProgressByChat(prev => ({ ...prev, ['__new__']: 0 }));
   };
+
 
   const handleChatSelect = (chatId: string) => {
-    // clear the active typing indicator immediately to avoid index mismatches
-    setTypingMessageIndex(null);
-    // clear any background typing timer for the previous chat
-    try {
-      const prev = currentChatId;
-      if (prev && typingTimersRef.current[prev]) {
-        window.clearTimeout(typingTimersRef.current[prev] as number);
-        delete typingTimersRef.current[prev];
-      }
-    } catch (e) {}
-
-    // also ensure typing progress exists for the chat we're switching to
-    setTypingProgressByChat(p => ({ ...p, [chatId]: p[chatId] ?? 0 }));
+    console.log('🔄 Switching to chat:', chatId);
+    console.log(`📊 Completed messages in target chat: ${completedTypingRef.current[chatId]?.size || 0}`);
     setCurrentChatId(chatId);
   };
+
 
   const handleDeleteChat = async (chatId: string) => {
     try {
       await apiService.deleteChat(chatId);
       setChats(prev => prev.filter(chat => chat.id !== chatId));
+      
+      // Clean up refs for deleted chat
+      delete completedTypingRef.current[chatId];
+      delete messagesByChat[chatId];
+      
       if (currentChatId === chatId) {
         handleNewChat();
       }
@@ -359,12 +376,14 @@ export function ChatInterface({}: ChatInterfaceProps) {
     }
   };
 
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
+
 
   const handleFileUploaded = (filename: string, fileId: string, newChatId?: string) => {
     setUploadedFiles(prev => [...prev, { name: filename, id: fileId }]);
@@ -379,16 +398,19 @@ export function ChatInterface({}: ChatInterfaceProps) {
     toast.success(`File "${filename}" is ready for discussion!`);
   };
 
+
   const removeUploadedFile = (fileId: string) => {
     setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
   };
 
+
   const examplePrompts = [
-    "Explain quantum physics in simple terms",
-    "Help me write an essay about climate change",
-    "What are the main causes of World War I?",
-    "Solve this calculus problem step by step"
+    "What is artificial intelligence?",
+    "How does machine learning work?",
+    "Explain blockchain technology",
+    "Tell me about cloud computing"
   ];
+
 
   const educationLevels = [
     { value: 'elementary', label: 'Elementary' },
@@ -397,6 +419,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
     { value: 'graduate', label: 'Graduate' },
     { value: 'professional', label: 'Professional' }
   ];
+
 
   return (
     <div className="flex-1 flex h-full bg-background overflow-hidden">
@@ -410,22 +433,8 @@ export function ChatInterface({}: ChatInterfaceProps) {
               New Chat
             </Button>
           </div>
-          
-          <div className="space-y-2">
-            <Select value={educationLevel} onValueChange={setEducationLevel}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {educationLevels.map((level) => (
-                  <SelectItem key={level.value} value={level.value}>
-                    {level.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
         </div>
+
 
         <ScrollArea className="flex-1">
           <div className="p-2">
@@ -479,6 +488,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
         </ScrollArea>
       </div>
 
+
       {/* Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-auto">
@@ -490,7 +500,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
                 </div>
                 <h1 className="text-3xl font-bold mb-4">How can I help you today?</h1>
                 <p className="text-muted-foreground mb-8">
-                  I'm your AI academic tutor, ready to help with any subject at your {educationLevels.find(l => l.value === educationLevel)?.label.toLowerCase()} level.
+                  I'm your AI assistant, ready to help with any questions you have.
                 </p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-8">
@@ -509,23 +519,32 @@ export function ChatInterface({}: ChatInterfaceProps) {
           ) : (
             <div>
               {messages.map((message, index) => {
-                const isCurrentlyTyping = typingMessageIndex === index;
-                
-                // FIXED: Get suggestions from ref first, fallback to message
                 const messageId = message.id || `msg-${index}`;
+                const chatKey = currentChatId || '__new__';
+                
+                // ⭐ CRITICAL: Check if this message has completed typing
+                const hasCompletedTyping = completedTypingRef.current[chatKey]?.has(messageId) || false;
+                
+                // ⭐ Only show typing if: assistant message, marked as new, and NOT completed
+                const shouldShowTyping = message.role === 'assistant' && 
+                                        message.isNew === true && 
+                                        message.isTyping === true &&
+                                        !hasCompletedTyping;
+                
+                // Get suggestions from ref
                 const suggestionsFromRef = suggestionsMapRef.current.get(messageId);
                 const messageSuggestions = message.role === 'assistant' 
                   ? (suggestionsFromRef || message.follow_up_suggestions || [])
                   : [];
                 
-                console.log(`📝 Message ${index}:`, {
+                console.log(`📝 Rendering message ${index}:`, {
                   id: messageId,
                   role: message.role,
-                  isTyping: isCurrentlyTyping,
-                  suggestionsFromRef,
-                  suggestionsFromMessage: message.follow_up_suggestions,
-                  finalSuggestions: messageSuggestions,
-                  suggestionsCount: messageSuggestions.length
+                  isNew: message.isNew,
+                  isTyping: message.isTyping,
+                  hasCompletedTyping,
+                  shouldShowTyping,
+                  contentPreview: message.content?.substring(0, 50)
                 });
                 
                 return (
@@ -537,22 +556,9 @@ export function ChatInterface({}: ChatInterfaceProps) {
                     }}
                     suggestions={messageSuggestions}
                     onSuggestionClick={handleSendMessage}
-                    isTyping={message.isTyping}
+                    isTyping={shouldShowTyping}
                     onTypingProgress={handleTypingProgress}
-                    onTypingComplete={() => {
-                      // Update the message to stop typing
-                      setMessages(prev => prev.map(msg => 
-                        msg.id === messageId ? { ...msg, isTyping: false } : msg
-                      ));
-                      handleTypingComplete();
-                    }}
-                    // provide initial typing index from per-chat progress
-                    initialTypingIndex={typingProgressByChat[currentChatId || '__new__'] ?? 0}
-                    onTypingProgressChar={(newIndex: number) => {
-                      // persist per-chat typing progress for active chat
-                      const chatKey = currentChatId || '__new__';
-                      setTypingProgressByChat(prev => ({ ...prev, [chatKey]: newIndex }));
-                    }}
+                    onTypingComplete={() => handleTypingComplete(messageId, chatKey)}
                   />
                 );
               })}
@@ -577,20 +583,22 @@ export function ChatInterface({}: ChatInterfaceProps) {
           )}
         </ScrollArea>
 
+
         {/* Input Area */}
         <div className="border-t border-border bg-background shrink-0">
           <div className="max-w-3xl mx-auto px-4 py-4">
             {uploadedFiles && uploadedFiles.length > 0 && (
-              <div className="mb-4">
-                <p className="text-sm text-muted-foreground mb-2">Uploaded files:</p>
+              <div className="mb-3">
+                <p className="text-xs text-muted-foreground mb-2">Uploaded files:</p>
                 <div className="flex flex-wrap gap-2">
                   {uploadedFiles.map((file) => (
-                    <Badge key={file.id} variant="secondary" className="gap-1">
+                    <Badge key={file.id} variant="secondary" className="gap-1.5 py-1">
+                      <Paperclip className="size-3" />
                       {file.name}
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="size-4 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                        className="size-4 p-0 hover:bg-destructive hover:text-destructive-foreground rounded-full"
                         onClick={() => removeUploadedFile(file.id)}
                       >
                         <X className="size-3" />
@@ -601,8 +609,9 @@ export function ChatInterface({}: ChatInterfaceProps) {
               </div>
             )}
 
+
             {showFileUpload && (
-              <div className="mb-4">
+              <div className="mb-3 p-4 border border-border rounded-xl bg-muted/30">
                 <FileUpload
                   chatId={currentChatId}
                   onFileUploaded={handleFileUploaded}
@@ -611,14 +620,18 @@ export function ChatInterface({}: ChatInterfaceProps) {
               </div>
             )}
 
+
             <div className="relative">
-              <div className="flex items-end gap-3 p-3 border border-border rounded-2xl bg-background shadow-sm">
-                <button 
-                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+              <div className="flex items-end gap-2 p-3 border border-border rounded-2xl bg-background shadow-sm hover:shadow-md transition-shadow">
+                <Button 
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 shrink-0 hover:bg-muted"
                   onClick={() => setShowFileUpload(!showFileUpload)}
+                  title="Upload file"
                 >
                   <Paperclip className="size-5 text-muted-foreground" />
-                </button>
+                </Button>
                 
                 <Textarea
                   ref={textareaRef}
@@ -627,7 +640,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
                   onKeyDown={handleKeyDown}
                   placeholder="Message EduBot..."
                   disabled={isLoading}
-                  className="flex-1 border-0 bg-transparent resize-none min-h-[24px] max-h-[200px] focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="flex-1 border-0 bg-transparent resize-none min-h-[24px] max-h-[200px] focus-visible:ring-0 focus-visible:ring-offset-0 py-2"
                   rows={1}
                 />
                 
@@ -635,9 +648,13 @@ export function ChatInterface({}: ChatInterfaceProps) {
                   onClick={() => handleSendMessage()}
                   disabled={!inputValue.trim() || isLoading}
                   size="sm"
-                  className="rounded-lg size-8 p-0 shrink-0"
+                  className="rounded-xl size-9 p-0 shrink-0"
                 >
-                  <ArrowUp className="size-4" />
+                  {isLoading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <ArrowUp className="size-4" />
+                  )}
                 </Button>
               </div>
               

@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 // Extended ChatMessage type with optional id property
 interface ExtendedChatMessage extends ChatMessageType {
   id?: string;
+  isTyping?: boolean;
 }
 
 interface ChatInterfaceProps {}
@@ -230,7 +231,8 @@ export function ChatInterface({}: ChatInterfaceProps) {
         timestamp: new Date().toISOString(),
         chat_id: currentChatId || response.reply.chat_id,
         user_id: user.id,
-        follow_up_suggestions: suggestions
+        follow_up_suggestions: suggestions,
+        isTyping: true // Always start with typing animation
       };
 
       console.log('💬 Assistant message created:', {
@@ -535,9 +537,15 @@ export function ChatInterface({}: ChatInterfaceProps) {
                     }}
                     suggestions={messageSuggestions}
                     onSuggestionClick={handleSendMessage}
-                    isTyping={isCurrentlyTyping}
+                    isTyping={message.isTyping}
                     onTypingProgress={handleTypingProgress}
-                    onTypingComplete={handleTypingComplete}
+                    onTypingComplete={() => {
+                      // Update the message to stop typing
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === messageId ? { ...msg, isTyping: false } : msg
+                      ));
+                      handleTypingComplete();
+                    }}
                     // provide initial typing index from per-chat progress
                     initialTypingIndex={typingProgressByChat[currentChatId || '__new__'] ?? 0}
                     onTypingProgressChar={(newIndex: number) => {

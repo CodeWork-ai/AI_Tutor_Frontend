@@ -10,7 +10,8 @@ import { toast } from 'sonner';
 import axios, { AxiosError } from 'axios';
 
 interface ForgotProps {
-  onBackToLogin: () => void;
+  onBackToLogin: (target?: 'login' | 'register') => void;
+  onReset?: (email: string) => void;
 }
 
 interface ApiErrorResponse {
@@ -19,7 +20,7 @@ interface ApiErrorResponse {
   detail?: string;
 }
 
-const Forgot: React.FC<ForgotProps> = ({ onBackToLogin }) => {
+const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,18 +53,37 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin }) => {
     setSuccess(false);
 
     try {
-      await apiService.requestPasswordReset(trimmedEmail);
-      
-      // SUCCESS: Always show success message (security best practice - prevents email enumeration)
+      // Call the backend and inspect the response. Some backends return 200 with
+      // { success: false, message: 'Account not found' } when the email does not exist.
+      const res: any = await apiService.requestPasswordReset(trimmedEmail);
+      console.debug('Password reset response (server):', res);
+
+      // If backend explicitly indicates failure (account not found), show that exact
+      // message to the user and redirect them back to login.
+      if (res && res.success === false) {
+        const serverMessage = res.message || 'Account not found.';
+        setError(serverMessage);
+        setSuccess(false);
+        // Show the backend message in a toast too (exact message as requested)
+        toast.error(serverMessage, { id: `password-reset-backend-${Date.now()}`, duration: 5000 });
+        // Redirect back to login after a short delay so user sees the message
+        setTimeout(() => onBackToLogin(), 1400);
+        return;
+      }
+
+      // Otherwise, treat as a successful request and show the success UI
       setSuccess(true);
       setError(null);
-      
-      // Show success toast with unique ID to prevent duplicates
-      toast.success('Reset link sent! Check your inbox and spam folder.', {
+      toast.success(res?.message || 'Password reset email has been sent. Check your inbox.', {
         id: `password-reset-success-${trimmedEmail}-${Date.now()}`,
         duration: 5000,
       });
-      
+
+      // Notify parent (AuthForm) that reset was initiated so it can show the Reset UI
+      if (typeof (onReset) === 'function') {
+        onReset(trimmedEmail);
+      }
+
     } catch (err) {
       // ERROR HANDLING: Proper Axios error handling
       let errorMessage = 'Unable to process your request. Please try again later.';
@@ -148,7 +168,7 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin }) => {
           
           <CardDescription className="text-gray-600 dark:text-gray-300">
             {success 
-              ? `We've sent a password reset link to ${email}. Please check your inbox and spam folder.`
+              ? `If an account with that email exists, a password reset link has been sent. Please check your inbox and spam folder.`
               : 'Enter your email address and we\'ll send you a link to reset your password.'
             }
           </CardDescription>
@@ -240,7 +260,7 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin }) => {
               variant="link"
               type="button"
               className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-              onClick={onBackToLogin}
+              onClick={() => onBackToLogin()}
               disabled={submitting}
             >
               <ArrowLeft className="mr-1 h-3 w-3" />

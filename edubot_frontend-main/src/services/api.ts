@@ -1422,8 +1422,12 @@ class ApiService {
     return response.json();
   }
 
-  async startVoiceSession(companionId: string): Promise<SessionStartResponse> {
-    const response = await fetch(`${this.baseUrl}/api/companions/${companionId}/start-session`, {
+  async startVoiceSession(companionId: string, resumeSessionId?: string): Promise<SessionStartResponse> {
+    let url = `${this.baseUrl}/api/companions/${companionId}/start-session`;
+    if (resumeSessionId) {
+      url += `?resume_session_id=${resumeSessionId}`;
+    }
+    const response = await fetch(url, {
       method: 'POST',
       headers: this.getHeaders(),
     });

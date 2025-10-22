@@ -27,11 +27,13 @@ export function ChatMessage({
   message, 
   suggestions = [], 
   onSuggestionClick,
-  isTyping = false, 
+  isTyping: explicitIsTyping, // The isTyping prop passed from parent
   onTypingComplete, 
   onTypingProgress 
   , initialTypingIndex = 0, onTypingProgressChar
 }: ChatMessageProps) {
+  // Enable typing by default for assistant messages, unless explicitly disabled
+  const isTyping = !message.role || message.role === 'assistant' ? (explicitIsTyping !== false) : false;
   const isUser = message.role === 'user';
   
   // Debug log to track suggestions

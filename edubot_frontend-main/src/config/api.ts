@@ -241,17 +241,25 @@ export const API_ROUTES = {
     test: () => API_CONFIG.ENDPOINTS.TRANSLATION_TEST,
   },
   
-  // Companions
+    // Companions
   companions: {
     list: () => API_CONFIG.ENDPOINTS.COMPANIONS,
     create: () => API_CONFIG.ENDPOINTS.COMPANION_CREATE,
     detail: (companionId: string) => `${API_CONFIG.ENDPOINTS.COMPANION_DETAIL}/${companionId}`,
     delete: (companionId: string) => `${API_CONFIG.ENDPOINTS.COMPANION_DELETE}/${companionId}`,
-    startSession: (companionId: string) => `${API_CONFIG.ENDPOINTS.START_SESSION}/${companionId}/start-session`,
-    stopSession: (sessionId: string) => `${API_CONFIG.ENDPOINTS.STOP_SESSION}/${sessionId}/stop`,
-    sessionStatus: (sessionId: string) => `${API_CONFIG.ENDPOINTS.SESSION_STATUS}/${sessionId}/status`,
-    saveTranscript: (sessionId: string) => `${API_CONFIG.ENDPOINTS.SAVE_TRANSCRIPT}/${sessionId}/transcript`,
-    getTranscript: (sessionId: string) => `${API_CONFIG.ENDPOINTS.GET_TRANSCRIPT}/${sessionId}/transcript`,
+    startSession: (companionId: string, resumeSessionId?: string, createChat?: boolean) => {
+      let url = `${API_CONFIG.ENDPOINTS.COMPANIONS}/${companionId}/voice/start`;
+      const params = [];
+      if (resumeSessionId) params.push(`resume_session_id=${resumeSessionId}`);
+      if (createChat) params.push('create_chat=true');
+      if (params.length > 0) url += `?${params.join('&')}`;
+      return url;
+    },
+    stopSession: (sessionId: string) => `${API_CONFIG.ENDPOINTS.COMPANIONS}/voice/sessions/${sessionId}/stop`,
+    sessionStatus: (sessionId: string) => `${API_CONFIG.ENDPOINTS.COMPANIONS}/voice/sessions/${sessionId}/status`,
+    saveTranscript: (sessionId: string) => `${API_CONFIG.ENDPOINTS.COMPANIONS}/voice/sessions/${sessionId}/transcript`,
+    getTranscript: (sessionId: string) => `${API_CONFIG.ENDPOINTS.COMPANIONS}/voice/sessions/${sessionId}/transcript`,
+    listSessions: (companionId: string) => `${API_CONFIG.ENDPOINTS.COMPANIONS}/${companionId}/voice/sessions`,
     voices: () => API_CONFIG.ENDPOINTS.AVAILABLE_VOICES,
     subjects: () => API_CONFIG.ENDPOINTS.AVAILABLE_SUBJECTS,
   },

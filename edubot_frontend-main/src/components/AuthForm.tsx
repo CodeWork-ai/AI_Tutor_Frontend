@@ -186,7 +186,14 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   if (isForgot) {
     return (
       <Forgot
-        onBackToLogin={() => setIsForgot(false)}
+        onBackToLogin={(target) => {
+          if (target === 'register') {
+            setActiveTab('register');
+            setIsForgot(false);
+          } else {
+            setIsForgot(false);
+          }
+        }}
         onReset={handleForgotSuccess}
       />
     );

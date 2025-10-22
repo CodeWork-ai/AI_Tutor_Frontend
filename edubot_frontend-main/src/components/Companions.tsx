@@ -28,6 +28,7 @@ import {
   UserCircle
 } from 'lucide-react';
 import { apiService, Companion, VoicesResponse } from '../services/api';
+import { API_CONFIG } from '../config/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import Vapi from '@vapi-ai/web';
@@ -66,6 +67,14 @@ export function Companions() {
   const [isMuted, setIsMuted] = useState(false);
   const [transcript, setTranscript] = useState<Array<{ role: string; content: string; timestamp: number }>>([]);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
+  const [pastSessions, setPastSessions] = useState<Array<{
+    session_id: string;
+    companion_id: string;
+    duration: number;
+    status: string;
+    transcript: Array<{ role: string; content: string; timestamp: number }>;
+    last_updated: string;
+  }>>([]);
   
   const vapiRef = useRef<Vapi | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -101,6 +110,34 @@ export function Companions() {
       try {
         const companionsData = await apiService.getCompanions();
         setCompanions(companionsData);
+
+        // Load past sessions for each companion
+        const sessionPromises = companionsData.map(async (companion) => {
+          try {
+            const response = await fetch(
+              `${API_CONFIG.BASE_URL}/api/companions/${companion.id}/sessions`,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-User-Id': apiService.getUserId()
+                }
+              }
+            );
+            if (!response.ok) return [];
+            const sessions = await response.json();
+            return sessions.map((session: any) => ({
+              ...session,
+              companion_id: companion.id
+            }));
+          } catch (error) {
+            console.error(`Failed to load sessions for companion ${companion.id}:`, error);
+            return [];
+          }
+        });
+
+        const allSessionsArrays = await Promise.all(sessionPromises);
+        const allSessions = allSessionsArrays.flat();
+        setPastSessions(allSessions);
       } catch (error) {
         console.error('Failed to load companions:', error);
       }
@@ -200,14 +237,33 @@ export function Companions() {
     return 'user';
   };
 
-  const handleStartSession = async (companionId: string) => {
+  const handleStartSession = async (companionId: string, resumeSessionId?: string) => {
     setSessionStatus('connecting');
     setActiveCompanionId(companionId);
-    setTranscript([]);
     lastMessageRef.current = ''; // Reset duplicate tracker
     
     try {
-      const session = await apiService.startVoiceSession(companionId);
+      // If resumeSessionId is provided, get the transcript first
+      if (resumeSessionId) {
+        try {
+          const existingSession = await apiService.getSessionTranscript(resumeSessionId);
+          if (existingSession?.transcript) {
+            setTranscript(existingSession.transcript.map(msg => ({
+              role: msg.role,
+              content: msg.content,
+              timestamp: new Date(msg.timestamp).getTime()
+            })));
+          }
+        } catch (error) {
+          console.error('Failed to load previous session:', error);
+          setTranscript([]);
+        }
+      } else {
+        setTranscript([]);
+      }
+
+      // Start or resume session
+      const session = await apiService.startVoiceSession(companionId, resumeSessionId);
       
       // Type guard to ensure properties exist
       if (!session || typeof session !== 'object') {
@@ -353,11 +409,27 @@ export function Companions() {
       await apiService.saveSessionTranscript(
         sessionId,
         transcript,
-        Math.floor(Date.now() / 1000)
+        Math.floor((Date.now() - (transcript[0]?.timestamp || Date.now())) / 1000)
       );
       console.log('✅ Transcript saved');
+
+      // Refresh past sessions
+      const companionsData = await apiService.getCompanions();
+      const allSessions = [];
+      for (const companion of companionsData) {
+        try {
+          const sessions = await apiService.getSessionTranscript(companion.id);
+          if (sessions) {
+            allSessions.push(...sessions);
+          }
+        } catch (error) {
+          console.error(`Failed to load sessions for companion ${companion.id}:`, error);
+        }
+      }
+      setPastSessions(allSessions);
     } catch (error) {
       console.error('Failed to save transcript:', error);
+      toast.error('Failed to save transcript');
     }
   };
 
@@ -386,17 +458,16 @@ export function Companions() {
     ? Object.entries(voices.voices).flatMap(([provider, voiceData]) => Object.keys(voiceData))
     : DEFAULT_VOICES;
 
-if (isLoading) {
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
-      <div className="text-center">
-        <Loader2 className="size-12 animate-spin mx-auto mb-4 text-primary" />
-        <p className="text-muted-foreground text-lg">Loading companions...</p>
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
+        <div className="text-center">
+          <Loader2 className="size-12 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground text-lg">Loading companions...</p>
+        </div>
       </div>
-    </div>
-  );
-}
-
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
@@ -405,7 +476,7 @@ if (isLoading) {
         <div className="p-6">
           <div className="flex items-center gap-3">
             <div className="size-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
-              <BrainCircuit className="size-6 text-green" />
+              <BrainCircuit className="size-6 text-white" />
             </div>
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
@@ -603,7 +674,7 @@ if (isLoading) {
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="size-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-md">
-                                  <User className="size-6 text-green" />
+                                  <User className="size-6 text-white" />
                                 </div>
                                 <div>
                                   <CardTitle className="text-lg">{companion.name}</CardTitle>
@@ -643,78 +714,110 @@ if (isLoading) {
 
                             <Separator />
 
-                            <div className="flex gap-2">
-                              {activeCompanionId === companion.id && sessionStatus !== 'idle' ? (
-                                <>
+                            <div className="flex flex-col gap-4">
+                              {/* Past Sessions List */}
+                              {pastSessions
+                                .filter(session => session.companion_id === companion.id)
+                                .sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime())
+                                .slice(0, 3) // Show last 3 sessions
+                                .map(session => (
+                                  <div key={session.session_id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg text-sm">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="size-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground">
+                                          {new Date(session.last_updated).toLocaleString()}
+                                        </span>
+                                      </div>
+                                      <div className="text-xs mt-1 text-muted-foreground">
+                                        {Math.floor(session.duration / 60)}m {session.duration % 60}s
+                                      </div>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleStartSession(companion.id, session.session_id)}
+                                      disabled={sessionStatus !== 'idle'}
+                                    >
+                                      Resume
+                                    </Button>
+                                  </div>
+                                ))}
+                              
+                              {/* Session Controls */}
+                              <div className="flex gap-2">
+                                {activeCompanionId === companion.id && sessionStatus !== 'idle' ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      onClick={toggleMute}
+                                      disabled={sessionStatus !== 'active'}
+                                      title={isMuted ? 'Unmute' : 'Mute'}
+                                    >
+                                      {isMuted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      className="flex-1"
+                                      onClick={handleStopSession}
+                                      disabled={sessionStatus === 'ending'}
+                                    >
+                                      {sessionStatus === 'ending' ? (
+                                        <>
+                                          <Loader2 className="size-4 mr-2 animate-spin" />
+                                          Ending...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Square className="size-4 mr-2" />
+                                          End Session
+                                        </>
+                                      )}
+                                    </Button>
+                                  </>
+                                ) : (
                                   <Button
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={toggleMute}
-                                    disabled={sessionStatus !== 'active'}
-                                    title={isMuted ? 'Unmute' : 'Mute'}
+                                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
+                                    onClick={() => handleStartSession(companion.id)}
+                                    disabled={sessionStatus !== 'idle'}
                                   >
-                                    {isMuted ? <MicOff className="size-4" /> : <Mic className="size-4" />}
-                                  </Button>
-                                  <Button
-                                    variant="destructive"
-                                    className="flex-1"
-                                    onClick={handleStopSession}
-                                    disabled={sessionStatus === 'ending'}
-                                  >
-                                    {sessionStatus === 'ending' ? (
+                                    {sessionStatus === 'connecting' && activeCompanionId === companion.id ? (
                                       <>
                                         <Loader2 className="size-4 mr-2 animate-spin" />
-                                        Ending...
+                                        Connecting...
                                       </>
                                     ) : (
                                       <>
-                                        <Square className="size-4 mr-2" />
-                                        End Session
+                                        <Mic className="size-4 mr-2" />
+                                        Start Voice Chat
                                       </>
                                     )}
                                   </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
-                                  onClick={() => handleStartSession(companion.id)}
-                                  disabled={sessionStatus !== 'idle'}
+                                )}
+                              </div>
+
+                              {activeCompanionId === companion.id && sessionStatus === 'active' && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg"
                                 >
-                                  {sessionStatus === 'connecting' && activeCompanionId === companion.id ? (
-                                    <>
-                                      <Loader2 className="size-4 mr-2 animate-spin" />
-                                      Connecting...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Mic className="size-4 mr-2" />
-                                      Start Voice Chat
-                                    </>
-                                  )}
-                                </Button>
+                                  <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300">
+                                    <div className="size-2 rounded-full bg-green-500 animate-pulse" />
+                                    <span className="font-medium">Active</span>
+                                    {isUserSpeaking && (
+                                      <span className="text-xs">(Speaking...)</span>
+                                    )}
+                                  </div>
+                                </motion.div>
                               )}
                             </div>
-
-                            {activeCompanionId === companion.id && sessionStatus === 'active' && (
-                              <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg"
-                              >
-                                <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300">
-                                  <div className="size-2 rounded-full bg-green-500 animate-pulse" />
-                                  <span className="font-medium">Active</span>
-                                  {isUserSpeaking && (
-                                    <span className="text-xs">(Speaking...)</span>
-                                  )}
-                                </div>
-                              </motion.div>
-                            )}
                           </CardContent>
                         </Card>
                       </motion.div>
                     ))}
-                    </div>
+                  </div>
                   </div>
                 )}
               </div>
@@ -818,7 +921,7 @@ if (isLoading) {
                             className="flex gap-3 items-center mt-4"
                           >
                             <div className="size-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                              <UserCircle className="size-5 text-green" />
+                              <UserCircle className="size-5 text-white" />
                             </div>
                             <div className="bg-muted px-4 py-2 rounded-2xl">
                               <div className="flex gap-1">

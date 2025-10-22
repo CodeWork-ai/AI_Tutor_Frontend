@@ -241,13 +241,13 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                 </div>
  
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-2">
                     <Label htmlFor="login-password">Password</Label>
                     <button
                       type="button"
                       onClick={() => handleLoginChange('showPassword', !loginForm.showPassword)}
                       disabled={isLoading}
-                      className="text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       tabIndex={-1}
                       aria-label={loginForm.showPassword ? 'Hide password' : 'Show password'}
                     >
@@ -336,13 +336,13 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                 </div>
  
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-2">
                     <Label htmlFor="register-password">Password</Label>
                     <button
                       type="button"
                       onClick={() => handleRegisterChange('showPassword', !registerForm.showPassword)}
                       disabled={isLoading}
-                      className="text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       tabIndex={-1}
                       aria-label={registerForm.showPassword ? 'Hide password' : 'Show password'}
                     >
@@ -363,19 +363,19 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                     required
                     autoComplete="new-password"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Must include uppercase, lowercase, and number
                   </p>
                 </div>
  
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-2">
                     <Label htmlFor="confirmPassword">Confirm Password</Label>
                     <button
                       type="button"
                       onClick={() => handleRegisterChange('showConfirmPassword', !registerForm.showConfirmPassword)}
                       disabled={isLoading}
-                      className="text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-gray-500 hover:text-gray-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       tabIndex={-1}
                       aria-label={registerForm.showConfirmPassword ? 'Hide password' : 'Show password'}
                     >

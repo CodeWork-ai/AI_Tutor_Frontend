@@ -148,7 +148,8 @@ if (isLoading) {
       <ScrollArea className="flex-1">
         <div className="p-6 max-w-4xl">
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-2">
+            {/* Make the tab triggers sticky so the content below can scroll */}
+            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-2 sticky top-0 bg-background z-10">
               <TabsTrigger value="profile" className="flex items-center gap-2">
                 <User className="size-4" />
                 Profile
@@ -167,7 +168,9 @@ if (isLoading) {
               </TabsTrigger>*/}
             </TabsList>
 
-            <TabsContent value="profile" className="space-y-6 mt-6">
+            {/* Scrollable content area for tab panels */}
+            <div className="flex-1 overflow-auto mt-6">
+              <TabsContent value="profile" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Profile Information</CardTitle>
@@ -213,9 +216,9 @@ if (isLoading) {
                   </p>
                 </CardContent>
               </Card>
-            </TabsContent>
+              </TabsContent>
 
-            <TabsContent value="preferences" className="space-y-6 mt-6">
+              <TabsContent value="preferences" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Learning Preferences</CardTitle>
@@ -303,7 +306,9 @@ if (isLoading) {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+              </TabsContent>
+
+            </div>
 
             {/*<TabsContent value="notifications" className="space-y-6 mt-6">
               <Card>

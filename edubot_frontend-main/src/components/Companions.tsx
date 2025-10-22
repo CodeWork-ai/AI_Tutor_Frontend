@@ -730,15 +730,36 @@ if (isLoading) {
                   <Card className="border-2 shadow-lg sticky top-6 h-[calc(100vh-8rem)]">
                     <CardHeader className="pb-3 border-b">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <MessageSquare className="size-5 text-purple-500" />
-                          Live Conversation
-                        </CardTitle>
-                        <Badge variant="outline" className="gap-1">
-                          <div className="size-2 rounded-full bg-green-500 animate-pulse" />
-                          {transcript.length}
-                        </Badge>
-                      </div>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <MessageSquare className="size-5 text-purple-500" />
+                            Live Conversation
+                          </CardTitle>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="gap-1">
+                              <div className="size-2 rounded-full bg-green-500 animate-pulse" />
+                              {transcript.length}
+                            </Badge>
+                            {/* Add End Session control in header so it's always reachable */}
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={handleStopSession}
+                              disabled={(sessionStatus as any) === 'idle' || (sessionStatus as any) === 'ending'}
+                            >
+                              {(sessionStatus as any) === 'ending' ? (
+                                <>
+                                  <Loader2 className="size-4 mr-2 animate-spin" />
+                                  Ending...
+                                </>
+                              ) : (
+                                <>
+                                  <Square className="size-4 mr-2" />
+                                  End Session
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0 flex flex-col h-[calc(100%-5rem)]">
                       <ScrollArea className="flex-1 p-4">

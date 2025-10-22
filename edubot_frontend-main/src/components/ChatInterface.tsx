@@ -21,14 +21,20 @@ export function ChatInterface({}: ChatInterfaceProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | undefined>();
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
+  // Persist messages per chat so background typing can continue
+  const [messagesByChat, setMessagesByChat] = useState<Record<string, ExtendedChatMessage[]>>({});
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; id: string }>>([]);
   const [educationLevel, setEducationLevel] = useState('school');
   const [typingMessageIndex, setTypingMessageIndex] = useState<number | null>(null);
+  // per-chat typing index (so other chats can be typing in background)
+  const [typingIndexByChat, setTypingIndexByChat] = useState<Record<string, number | null>>({});
+  const typingTimersRef = useRef<Record<string, number | null>>({});
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   
   // FIXED: Store suggestions in ref to persist across re-renders
   const suggestionsMapRef = useRef<Map<string, string[]>>(new Map());
@@ -39,9 +45,18 @@ export function ChatInterface({}: ChatInterfaceProps) {
 
   useEffect(() => {
     if (currentChatId) {
-      loadChatHistory();
+      // If we have cached messages for this chat, use them immediately
+      const cached = messagesByChat[currentChatId];
+      if (cached) {
+        setMessages(cached);
+        setTypingMessageIndex(typingIndexByChat[currentChatId] ?? null);
+      } else {
+        loadChatHistory();
+      }
     } else {
-      setMessages([]);
+      // New chat view: show any unsent temp messages cached under '__new__'
+      const cachedNew = messagesByChat['__new__'] || [];
+      setMessages(cachedNew);
       setUploadedFiles([]);
       setTypingMessageIndex(null);
       suggestionsMapRef.current.clear(); // Clear suggestions when starting new chat
@@ -110,14 +125,37 @@ export function ChatInterface({}: ChatInterfaceProps) {
       if (scrollAreaRef.current) {
         const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
         if (scrollContainer) {
-          scrollContainer.scrollTo({
-            top: scrollContainer.scrollHeight,
-            behavior: smooth ? 'smooth' : 'auto'
-          });
+          // Only auto-scroll when user hasn't scrolled up (autoScrollEnabled)
+          if (autoScrollEnabled) {
+            scrollContainer.scrollTo({
+              top: scrollContainer.scrollHeight,
+              behavior: smooth ? 'smooth' : 'auto'
+            });
+          }
         }
       }
     }, 10);
   };
+
+  // Watch user scroll to enable/disable auto-scrolling when they manually scroll up
+  useEffect(() => {
+    const root = scrollAreaRef.current;
+    if (!root) return;
+    const viewport = root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+    if (!viewport) return;
+
+    const onScroll = () => {
+      const tolerance = 120; // px from bottom to still consider "at bottom"
+      const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= tolerance;
+      setAutoScrollEnabled(atBottom);
+    };
+
+    viewport.addEventListener('scroll', onScroll, { passive: true });
+    // initialize
+    onScroll();
+
+    return () => viewport.removeEventListener('scroll', onScroll);
+  }, [scrollAreaRef.current]);
 
   const handleSendMessage = async (messageText?: string) => {
     const message = messageText || inputValue.trim();
@@ -138,7 +176,16 @@ export function ChatInterface({}: ChatInterfaceProps) {
       user_id: user.id
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    // add to active messages and persist per-chat
+    setMessages(prev => {
+      const next = [...prev, userMessage];
+      if (currentChatId) {
+        setMessagesByChat(m => ({ ...m, [currentChatId]: next }));
+      } else {
+        setMessagesByChat(m => ({ ...m, ['__new__']: next }));
+      }
+      return next;
+    });
     setInputValue('');
     setIsLoading(true);
 
@@ -159,7 +206,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
         loadChats();
       }
 
-      const messageId = `msg-${Date.now()}`;
+  const messageId = `msg-${Date.now()}`;
       const suggestions = response.reply.follow_up_suggestions || [];
       
       // FIXED: Store suggestions in ref BEFORE adding to state
@@ -190,7 +237,25 @@ export function ChatInterface({}: ChatInterfaceProps) {
 
       setMessages(prev => {
         const newMessages = [...prev, assistantMessage];
-        setTypingMessageIndex(newMessages.length - 1);
+        // persist per-chat
+        const chatKey = currentChatId || response.reply.chat_id || '__new__';
+        setMessagesByChat(m => ({ ...m, [chatKey]: newMessages }));
+        // set per-chat typing index
+        setTypingIndexByChat(t => ({ ...t, [chatKey]: newMessages.length - 1 }));
+        // if this chat is active, show typing indicator
+        if (chatKey === currentChatId) {
+          setTypingMessageIndex(newMessages.length - 1);
+        } else {
+          // Start a background timer to simulate typing completion for non-active chat
+          const timerId = window.setTimeout(() => {
+            // clear per-chat typing index
+            setTypingIndexByChat(prev => ({ ...prev, [chatKey]: null }));
+            // show notification for background chat completion
+            toast.success('Response ready in background');
+            delete typingTimersRef.current[chatKey];
+          }, 2500 + Math.min(5000, (assistantMessage.content || '').length * 10));
+          typingTimersRef.current[chatKey] = timerId;
+        }
         return newMessages;
       });
 
@@ -214,23 +279,52 @@ export function ChatInterface({}: ChatInterfaceProps) {
   };
 
   const handleTypingProgress = () => {
-    scrollToBottom();
+    // Only auto-scroll if user hasn't scrolled up
+    if (autoScrollEnabled) scrollToBottom();
   };
 
   const handleTypingComplete = () => {
+    // Clear typing for active chat
     setTypingMessageIndex(null);
-    scrollToBottom();
+
+    // Clear per-chat typing index and notify for the chat that finished
+    const chatKey = currentChatId || '__new__';
+    setTypingIndexByChat(prev => {
+      const next = { ...prev, [chatKey]: null };
+      return next;
+    });
+
+    // Scroll only if user is at bottom or for the active chat
+    if (autoScrollEnabled) scrollToBottom();
+
+    // Show a short toast indicating completion
+    toast.success('Response ready');
   };
 
   const handleNewChat = () => {
+    // Clear active chat and reset new-chat cache so the view is empty
     setCurrentChatId(undefined);
     setMessages([]);
     setUploadedFiles([]);
     setTypingMessageIndex(null);
     suggestionsMapRef.current.clear();
+    // Clear any cached draft messages for the '__new__' key
+    setMessagesByChat(prev => ({ ...prev, ['__new__']: [] }));
+    setTypingIndexByChat(prev => ({ ...prev, ['__new__']: null }));
   };
 
   const handleChatSelect = (chatId: string) => {
+    // clear the active typing indicator immediately to avoid index mismatches
+    setTypingMessageIndex(null);
+    // clear any background typing timer for the previous chat
+    try {
+      const prev = currentChatId;
+      if (prev && typingTimersRef.current[prev]) {
+        window.clearTimeout(typingTimersRef.current[prev] as number);
+        delete typingTimersRef.current[prev];
+      }
+    } catch (e) {}
+
     setCurrentChatId(chatId);
   };
 

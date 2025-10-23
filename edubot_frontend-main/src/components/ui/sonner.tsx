@@ -11,7 +11,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       // default duration for all toasts (milliseconds)
-      duration={500}
+      duration={1000}
       style={
         {
           "--normal-bg": "var(--popover)",

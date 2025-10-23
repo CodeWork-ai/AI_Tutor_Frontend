@@ -672,6 +672,10 @@ class ApiService {
     if (includeContentType) {
       headers['Content-Type'] = 'application/json';
     }
+    // Add X-User-Id header if user is authenticated
+    if (this.currentUser) {
+      headers['X-User-Id'] = this.currentUser.id;
+    }
     return headers;
   }
 
@@ -1424,6 +1428,10 @@ class ApiService {
   }
 
   async startVoiceSession(companionId: string, resumeSessionId?: string): Promise<SessionStartResponse> {
+    if (!this.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
     let url = `${this.baseUrl}/api/companions/${companionId}/start-session`;
     if (resumeSessionId) {
       url += `?resume_session_id=${resumeSessionId}`;

@@ -12,6 +12,7 @@ import {
 } from "./ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Separator } from "./ui/separator";
+import { ScrollArea } from "./ui/scroll-area";
 import { Loader2, Sparkles, Eye, EyeOff } from "lucide-react";
 import { apiService, User } from "../services/api";
 import { toast } from "sonner";
@@ -250,12 +251,15 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         </CardHeader>
 
         <CardContent>
+          {/* Make the Tabs area scrollable so long forms (register) don't overflow the card */}
+          {/* Use fixed height and flex so TabContent (with flex-1) can grow and scroll */}
+          <div className="h-[60vh] flex flex-col min-h-0">
           <Tabs
             value={activeTab}
             onValueChange={(value) =>
               setActiveTab(value as "login" | "register")
             }
-            className="w-full"
+            className="w-full h-full flex flex-col min-h-0"
           >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Login</TabsTrigger>
@@ -263,7 +267,8 @@ export function AuthForm({ onLogin }: AuthFormProps) {
             </TabsList>
 
             {/* LOGIN TAB */}
-            <TabsContent value="login" className="space-y-4 mt-6">
+            <TabsContent value="login" className="flex-1 space-y-4 mt-6 min-h-0">
+              <ScrollArea className="h-full pr-4">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <label
@@ -368,6 +373,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                   {isLoading ? "Logging in..." : "Login"}
                 </Button>
               </form>
+              </ScrollArea>
 
               <Separator className="my-4" />
 
@@ -385,7 +391,8 @@ export function AuthForm({ onLogin }: AuthFormProps) {
             </TabsContent>
 
             {/* REGISTER TAB */}
-            <TabsContent value="register" className="space-y-4 mt-6">
+            <TabsContent value="register" className="flex-1 space-y-4 mt-6 min-h-0">
+              <ScrollArea className="h-full pr-4">
               <form onSubmit={handleRegister} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -601,8 +608,10 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                   {isLoading ? "Creating account..." : "Create Account"}
                 </Button>
               </form>
+              </ScrollArea>
             </TabsContent>
           </Tabs>
+          </div>
         </CardContent>
       </Card>
     </div>

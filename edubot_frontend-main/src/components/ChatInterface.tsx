@@ -427,10 +427,12 @@ export function ChatInterface({}: ChatInterfaceProps) {
                     }`}
                     onClick={() => handleChatSelect(chat.id)}
                   >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center gap-3 flex-1 min-w-0 pr-8">
                       <MessageSquare className="size-4 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{chat.title}</div>
+                        <div className="font-medium truncate max-w-[180px]">
+                          {chat.title.length > 25 ? `${chat.title.substring(0, 25)}...` : chat.title}
+                        </div>
                         {chat.level && (
                           <div className="text-xs text-muted-foreground truncate">
                             {educationLevels.find((l) => l.value === chat.level)
@@ -439,19 +441,17 @@ export function ChatInterface({}: ChatInterfaceProps) {
                         )}
                       </div>
                     </div>
-                    <div className="absolute right-2 flex items-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          handleDeleteChat(chat.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 p-0 absolute right-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        handleDeleteChat(chat.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>

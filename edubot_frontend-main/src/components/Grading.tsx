@@ -33,7 +33,7 @@ export function Grading() {
     question: '',
     answer: '',
     assignment_type: 'Essay',
-    total_score: 10,
+    total_score: 100,
     rubric: ''
   });
   const [textResult, setTextResult] = useState<GradingResponse | null>(null);

@@ -37,13 +37,6 @@ interface ExtendedChatMessage extends ChatMessageType {
   _forceUpdate?: number;
 }
 
-// ⭐ NEW: Typing progress interface
-interface TypingProgress {
-  displayedText: string;
-  currentIndex: number;
-  isComplete: boolean;
-}
-
 interface ChatInterfaceProps {}
 
 export function ChatInterface({}: ChatInterfaceProps) {
@@ -60,17 +53,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
     Array<{ name: string; id: string }>
   >([]);
   const [educationLevel, setEducationLevel] = useState("school");
-
-  // ⭐ CRITICAL: Track completed typing per chat - persists across renders and chat switches
-  const completedTypingRef = useRef<Record<string, Set<string>>>({}); // chatId -> Set of completed message IDs
-
-  // ⭐ NEW: Store typing progress per message (persists across unmounts)
-  const typingProgressRef = useRef<Record<string, TypingProgress>>({});
-
-  // ⭐ NEW: Track which message is currently animating
-  const [activeTypingMessageId, setActiveTypingMessageId] = useState<
-    string | null
-  >(null);
 
   // Store suggestions in ref to persist across re-renders
   const suggestionsMapRef = useRef<Map<string, string[]>>(new Map());
@@ -114,68 +96,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
     }
   }, [inputValue]);
 
-  // ⭐ NEW: Centralized typing animation driver
-  useEffect(() => {
-    if (!activeTypingMessageId) return;
-
-    const chatKey = currentChatId || "__new__";
-    const message = messages.find((m) => m.id === activeTypingMessageId);
-
-    if (!message || message.role !== "assistant") {
-      setActiveTypingMessageId(null);
-      return;
-    }
-
-    const progress = typingProgressRef.current[activeTypingMessageId] || {
-      displayedText: "",
-      currentIndex: 0,
-      isComplete: false,
-    };
-
-    // Skip if already complete
-    if (
-      progress.isComplete ||
-      progress.currentIndex >= message.content.length
-    ) {
-      handleTypingComplete(activeTypingMessageId, chatKey);
-      setActiveTypingMessageId(null);
-      return;
-    }
-
-    // Type next character
-    const timer = setTimeout(() => {
-      const nextIndex = progress.currentIndex + 1;
-      const nextText = message.content.slice(0, nextIndex);
-
-      typingProgressRef.current[activeTypingMessageId] = {
-        displayedText: nextText,
-        currentIndex: nextIndex,
-        isComplete: nextIndex >= message.content.length,
-      };
-
-      // Trigger re-render to update display
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === activeTypingMessageId
-            ? { ...m, _forceUpdate: Date.now() }
-            : m
-        )
-      );
-
-      if (autoScrollEnabled) scrollToBottom();
-
-      // Continue typing or complete
-      if (nextIndex < message.content.length) {
-        // Continue typing - will retrigger this effect
-        setActiveTypingMessageId(activeTypingMessageId);
-      } else {
-        handleTypingComplete(activeTypingMessageId, chatKey);
-        setActiveTypingMessageId(null);
-      }
-    }, 70); // Typing speed in ms
-
-    return () => clearTimeout(timer);
-  }, [activeTypingMessageId, messages, currentChatId, autoScrollEnabled]);
+  // Typing effect removed
 
   const loadChats = async () => {
     try {
@@ -226,30 +147,8 @@ export function ChatInterface({}: ChatInterfaceProps) {
           }
         );
 
-        // ⭐ CRITICAL: Mark ALL loaded messages as completed typing
-        if (!completedTypingRef.current[currentChatId]) {
-          completedTypingRef.current[currentChatId] = new Set();
-        }
-
-        formattedMessages.forEach((msg) => {
-          if (msg.id) {
-            completedTypingRef.current[currentChatId!].add(msg.id);
-
-            // ⭐ NEW: Set typing progress as complete for historical messages
-            typingProgressRef.current[msg.id] = {
-              displayedText: msg.content,
-              currentIndex: msg.content.length,
-              isComplete: true,
-            };
-
-            console.log(
-              `✅ Marked message ${msg.id} as completed (loaded from history)`
-            );
-          }
-        });
-
         console.log(
-          `📚 Loaded ${formattedMessages.length} messages, all marked as completed`
+          `📚 Loaded ${formattedMessages.length} messages from history`
         );
 
         setMessages(formattedMessages);
@@ -377,18 +276,9 @@ export function ChatInterface({}: ChatInterfaceProps) {
         isNew: true,
       };
 
-      // ⭐ NEW: Initialize typing progress
-      typingProgressRef.current[messageId] = {
-        displayedText: "",
-        currentIndex: 0,
-        isComplete: false,
-      };
-
       console.log("💬 Assistant message created:", {
         id: assistantMessage.id,
         chatId: chatKey,
-        isTyping: true,
-        isNew: true,
       });
 
       setMessages((prev) => {
@@ -396,9 +286,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
         setMessagesByChat((m) => ({ ...m, [chatKey]: newMessages }));
         return newMessages;
       });
-
-      // ⭐ NEW: Start typing animation
-      setActiveTypingMessageId(messageId);
     } catch (error) {
       console.error("Failed to send message:", error);
       toast.error("Failed to send message");
@@ -420,37 +307,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
     }
   };
 
-  const handleTypingComplete = (messageId: string, chatId: string) => {
-    console.log("✅ Typing completed for message:", { messageId, chatId });
-
-    // ⭐ CRITICAL: Mark message as completed in ref (persists across renders)
-    if (!completedTypingRef.current[chatId]) {
-      completedTypingRef.current[chatId] = new Set();
-    }
-    completedTypingRef.current[chatId].add(messageId);
-
-    // ⭐ NEW: Mark typing progress as complete
-    if (typingProgressRef.current[messageId]) {
-      typingProgressRef.current[messageId].isComplete = true;
-    }
-
-    console.log(`✅ Added ${messageId} to completed set for chat ${chatId}`);
-    console.log(
-      `📊 Total completed messages in this chat: ${completedTypingRef.current[chatId].size}`
-    );
-
-    // Update message state to remove typing flags
-    const updateMessage = (msg: ExtendedChatMessage) =>
-      msg.id === messageId ? { ...msg, isTyping: false, isNew: false } : msg;
-
-    setMessages((prev) => prev.map(updateMessage));
-
-    // Update cached messages
-    setMessagesByChat((prev) => ({
-      ...prev,
-      [chatId]: (prev[chatId] || []).map(updateMessage),
-    }));
-
+  const handleMessageComplete = () => {
     if (autoScrollEnabled) scrollToBottom();
     toast.success("Response ready", { duration: 1500 });
   };
@@ -462,18 +319,11 @@ export function ChatInterface({}: ChatInterfaceProps) {
     setUploadedFiles([]);
     suggestionsMapRef.current.clear();
     setMessagesByChat((prev) => ({ ...prev, ["__new__"]: [] }));
-    setActiveTypingMessageId(null); // ⭐ NEW: Stop any active typing
   };
 
   const handleChatSelect = (chatId: string) => {
     console.log("🔄 Switching to chat:", chatId);
-    console.log(
-      `📊 Completed messages in target chat: ${
-        completedTypingRef.current[chatId]?.size || 0
-      }`
-    );
     setCurrentChatId(chatId);
-    // ⭐ NEW: Typing continues in background, state is preserved
   };
 
   const handleDeleteChat = async (chatId: string) => {
@@ -481,17 +331,8 @@ export function ChatInterface({}: ChatInterfaceProps) {
       await apiService.deleteChat(chatId);
       setChats((prev) => prev.filter((chat) => chat.id !== chatId));
 
-      // Clean up refs for deleted chat
-      delete completedTypingRef.current[chatId];
+      // Clean up message cache for deleted chat
       delete messagesByChat[chatId];
-
-      // ⭐ NEW: Clean up typing progress for deleted chat messages
-      Object.keys(typingProgressRef.current).forEach((msgId) => {
-        const msg = messages.find((m) => m.id === msgId);
-        if (msg?.chat_id === chatId) {
-          delete typingProgressRef.current[msgId];
-        }
-      });
 
       if (currentChatId === chatId) {
         handleNewChat();
@@ -655,23 +496,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
                 const messageId = message.id || `msg-${index}`;
                 const chatKey = currentChatId || "__new__";
 
-                // ⭐ Get typing progress for this message
-                const typingProgress = typingProgressRef.current[messageId];
-                const hasCompletedTyping =
-                  completedTypingRef.current[chatKey]?.has(messageId) || false;
-
-                // ⭐ Only show typing if: assistant message, marked as new, and NOT completed
-                const shouldShowTyping =
-                  message.role === "assistant" &&
-                  message.isNew === true &&
-                  !hasCompletedTyping;
-
-                // ⭐ NEW: Get displayed text based on typing progress
-                const displayedContent =
-                  shouldShowTyping && typingProgress
-                    ? typingProgress.displayedText
-                    : message.content;
-
                 // Get suggestions from ref
                 const suggestionsFromRef =
                   suggestionsMapRef.current.get(messageId);
@@ -683,11 +507,7 @@ export function ChatInterface({}: ChatInterfaceProps) {
                 console.log(`📝 Rendering message ${index}:`, {
                   id: messageId,
                   role: message.role,
-                  isNew: message.isNew,
-                  hasCompletedTyping,
-                  shouldShowTyping,
-                  progressIndex: typingProgress?.currentIndex,
-                  contentLength: message.content?.length,
+                  content: message.content
                 });
 
                 return (
@@ -695,12 +515,12 @@ export function ChatInterface({}: ChatInterfaceProps) {
                     key={messageId}
                     message={{
                       role: message.role || "assistant",
-                      content: displayedContent, // ⭐ Pass current typing progress
+                      content: message.content || '',
                     }}
                     suggestions={messageSuggestions}
                     onSuggestionClick={handleSendMessage}
-                    isTyping={shouldShowTyping}
-                    showCursor={shouldShowTyping && !typingProgress?.isComplete}
+                    isTyping={false}
+                    showCursor={false}
                   />
                 );
               })}

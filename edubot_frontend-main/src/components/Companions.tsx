@@ -115,7 +115,7 @@ export function Companions() {
         const sessionPromises = companionsData.map(async (companion) => {
           try {
             const response = await fetch(
-              `${API_CONFIG.BASE_URL}/api/companions/${companion.id}/sessions`,
+              `${API_CONFIG.BASE_URL}/api/companions/sessions?companion_id=${companion.id}`,
               {
                 headers: {
                   'Content-Type': 'application/json',
@@ -124,10 +124,14 @@ export function Companions() {
               }
             );
             if (!response.ok) return [];
-            const sessions = await response.json();
-            return sessions.map((session: any) => ({
-              ...session,
-              companion_id: companion.id
+            const data = await response.json();
+            return data.sessions.map((session: any) => ({
+              session_id: session.id,
+              companion_id: session.companion_id,
+              duration: session.duration || 0,
+              status: session.status,
+              last_updated: session.ended_at || session.started_at,
+              transcript: [] // We'll load transcripts separately if needed
             }));
           } catch (error) {
             console.error(`Failed to load sessions for companion ${companion.id}:`, error);
@@ -246,16 +250,46 @@ export function Companions() {
       // If resumeSessionId is provided, get the transcript first
       if (resumeSessionId) {
         try {
-          const existingSession = await apiService.getSessionTranscript(resumeSessionId);
-          if (existingSession?.transcript) {
-            setTranscript(existingSession.transcript.map(msg => ({
-              role: msg.role,
-              content: msg.content,
-              timestamp: new Date(msg.timestamp).getTime()
-            })));
+          const response = await fetch(
+            `${API_CONFIG.BASE_URL}/api/companions/sessions/${resumeSessionId}/resume`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-User-Id': apiService.getUserId()
+              }
+            }
+          );
+          
+          if (!response.ok) {
+            throw new Error('Failed to resume session');
+          }
+          
+          const sessionData = await response.json();
+          if (sessionData?.transcript) {
+            // Filter out non-final messages and duplicates
+            const uniqueMessages = new Map();
+            sessionData.transcript.forEach((msg: { 
+              role: string; 
+              content: string; 
+              timestamp: string; 
+              final?: boolean;
+              user_id?: string | null;
+            }) => {
+              if (msg.final !== false) {  // Include messages that are either final or undefined
+                const key = `${msg.timestamp}-${msg.content}`;
+                uniqueMessages.set(key, {
+                  role: msg.role,
+                  content: msg.content,
+                  timestamp: new Date(msg.timestamp).getTime()
+                });
+              }
+            });
+            
+            setTranscript(Array.from(uniqueMessages.values()));
           }
         } catch (error) {
-          console.error('Failed to load previous session:', error);
+          console.error('Failed to resume session:', error);
           setTranscript([]);
         }
       } else {
@@ -415,17 +449,35 @@ export function Companions() {
 
       // Refresh past sessions
       const companionsData = await apiService.getCompanions();
-      const allSessions = [];
-      for (const companion of companionsData) {
+      const sessionPromises = companionsData.map(async (companion) => {
         try {
-          const sessions = await apiService.getSessionTranscript(companion.id);
-          if (sessions) {
-            allSessions.push(...sessions);
-          }
+          const response = await fetch(
+            `${API_CONFIG.BASE_URL}/api/companions/sessions?companion_id=${companion.id}`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'X-User-Id': apiService.getUserId()
+              }
+            }
+          );
+          if (!response.ok) return [];
+          const data = await response.json();
+          return data.sessions.map((session: any) => ({
+            session_id: session.id,
+            companion_id: session.companion_id,
+            duration: session.duration || 0,
+            status: session.status,
+            last_updated: session.ended_at || session.started_at,
+            transcript: [] // We'll load transcripts separately if needed
+          }));
         } catch (error) {
           console.error(`Failed to load sessions for companion ${companion.id}:`, error);
+          return [];
         }
-      }
+      });
+
+      const allSessionsArrays = await Promise.all(sessionPromises);
+      const allSessions = allSessionsArrays.flat();
       setPastSessions(allSessions);
     } catch (error) {
       console.error('Failed to save transcript:', error);

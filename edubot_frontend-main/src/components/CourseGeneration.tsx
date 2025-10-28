@@ -9,13 +9,17 @@ import { Download, Loader2, CheckCircle } from 'lucide-react';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
 
+// Define initial state for easy reset
+const INITIAL_FORM_STATE = {
+  courseTitle: '',
+  educationLevel: 'Middle/High School'
+};
+
 export function CourseGeneration() {
   const [isLoading, setIsLoading] = useState(false);
-  const [completeForm, setCompleteForm] = useState({
-    courseTitle: '',
-    educationLevel: 'Middle/High School'
-  });
+  const [completeForm, setCompleteForm] = useState(INITIAL_FORM_STATE);
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [generatedCourseTitle, setGeneratedCourseTitle] = useState<string>('');
 
   const educationLevels = [
     { value: 'Elementary School', label: 'Elementary School' },
@@ -24,6 +28,17 @@ export function CourseGeneration() {
     { value: 'Graduate Studies', label: 'Graduate Studies' },
     { value: 'Professional Development', label: 'Professional Development' }
   ];
+
+  const handleDownloadPdf = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${fileName.replace(/\s+/g, '_')}.pdf`; // Fixed regex
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleGenerateComplete = async () => {
     if (!completeForm.courseTitle.trim()) {
@@ -37,17 +52,17 @@ export function CourseGeneration() {
         completeForm.courseTitle,
         completeForm.educationLevel
       );
+      
+      // Store the generated course title before resetting form
+      const courseTitle = completeForm.courseTitle;
+      setGeneratedCourseTitle(courseTitle);
       setPdfBlob(pdfBlob);
       
-      // Create a download URL for the PDF
-      const url = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${completeForm.courseTitle.replace(/\\s+/g, '_')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Download the PDF
+      handleDownloadPdf(pdfBlob, courseTitle);
+      
+      // Reset form to initial state after successful generation
+      setCompleteForm(INITIAL_FORM_STATE);
       
       toast.success('Course generated successfully! The PDF has been downloaded.');
     } catch (error) {
@@ -88,6 +103,7 @@ export function CourseGeneration() {
                     placeholder="e.g., Introduction to Machine Learning"
                     value={completeForm.courseTitle}
                     onChange={(e) => setCompleteForm(prev => ({ ...prev, courseTitle: e.target.value }))}
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
@@ -95,6 +111,7 @@ export function CourseGeneration() {
                   <Select 
                     value={completeForm.educationLevel} 
                     onValueChange={(value: string) => setCompleteForm(prev => ({ ...prev, educationLevel: value }))}
+                    disabled={isLoading}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -130,7 +147,7 @@ export function CourseGeneration() {
             </CardContent>
           </Card>
 
-          {pdfBlob && (
+          {pdfBlob && !isLoading && (
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -140,21 +157,15 @@ export function CourseGeneration() {
               </CardHeader>
               <CardContent>
                 <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-sm font-medium mb-2">
+                    {generatedCourseTitle}
+                  </p>
                   <p className="text-sm text-muted-foreground mb-4">
                     Your course has been generated and downloaded. Click below to download it again if needed.
                   </p>
                   <Button 
                     size="sm"
-                    onClick={() => {
-                      const url = URL.createObjectURL(pdfBlob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `${completeForm.courseTitle.replace(/\\s+/g, '_')}.pdf`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
-                    }}
+                    onClick={() => handleDownloadPdf(pdfBlob, generatedCourseTitle)}
                   >
                     <Download className="size-4 mr-2" />
                     Download PDF Again

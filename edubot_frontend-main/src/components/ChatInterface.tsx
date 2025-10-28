@@ -13,7 +13,6 @@ import {
 import {
   Loader2,
   Sparkles,
-  Paperclip,
   ArrowUp,
   X,
   MessageSquare,
@@ -29,7 +28,6 @@ import {
 } from "../services/api";
 import { toast } from "sonner";
 
-// Extended ChatMessage type
 interface ExtendedChatMessage extends ChatMessageType {
   id?: string;
   isTyping?: boolean;
@@ -48,15 +46,12 @@ export function ChatInterface({}: ChatInterfaceProps) {
   >({});
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [showFileUpload, setShowFileUpload] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<
     Array<{ name: string; id: string }>
   >([]);
   const [educationLevel, setEducationLevel] = useState("school");
 
-  // Store suggestions in ref to persist across re-renders
   const suggestionsMapRef = useRef<Map<string, string[]>>(new Map());
-
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
@@ -76,7 +71,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
         loadChatHistory();
       }
     } else {
-      // New chat view
       const cachedNew = messagesByChat["__new__"] || [];
       setMessages(cachedNew);
       setUploadedFiles([]);
@@ -95,8 +89,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
         Math.min(textareaRef.current.scrollHeight, 200) + "px";
     }
   }, [inputValue]);
-
-  // Typing effect removed
 
   const loadChats = async () => {
     try {
@@ -204,106 +196,111 @@ export function ChatInterface({}: ChatInterfaceProps) {
   const handleSendMessage = async (messageText?: string) => {
     const message = messageText || inputValue.trim();
     if (!message || isLoading) return;
-    if (showFileUpload && uploadedFiles.length === 0) {
-      setShowFileUpload(false);
-    }
+
     const user = apiService.getCurrentUser();
     if (!user) {
-      toast.error("Please log in to send messages");
-      return;
+        toast.error("Please log in to send messages");
+        return;
     }
 
+    const tempMessageId = `user-${Date.now()}`;
     const userMessage: ExtendedChatMessage = {
-      role: "user",
-      content: message,
-      timestamp: new Date().toISOString(),
-      chat_id: currentChatId || "temp",
-      message: message,
-      user_id: user.id,
+        id: tempMessageId,
+        role: "user",
+        content: message,
+        timestamp: new Date().toISOString(),
+        chat_id: currentChatId || "temp",
+        message: message,
+        user_id: user.id,
     };
+    
+    const wasNewChat = !currentChatId;
+    const chatKeyForUserMessage = currentChatId || "__new__";
 
-    setMessages((prev) => {
-      const next = [...prev, userMessage];
-      const chatKey = currentChatId || "__new__";
-      setMessagesByChat((m) => ({ ...m, [chatKey]: next }));
-      return next;
+    // Use functional updates to ensure state consistency
+    setMessages(prevMessages => [...prevMessages, userMessage]);
+    setMessagesByChat(prevMap => {
+        const existingMessages = prevMap[chatKeyForUserMessage] || [];
+        return { ...prevMap, [chatKeyForUserMessage]: [...existingMessages, userMessage] };
     });
+
     setInputValue("");
     setIsLoading(true);
-
     setTimeout(() => scrollToBottom(), 100);
 
     try {
-      const chatMessage = {
-        message: message,
-        chat_id: currentChatId,
-        user_id: user.id,
-      };
+        const chatMessage = {
+            message: message,
+            chat_id: currentChatId,
+            user_id: user.id,
+        };
 
-      const response = await apiService.sendMessage(chatMessage);
+        const response = await apiService.sendMessage(chatMessage);
+        const responseChatId = response.reply.chat_id;
 
-      // ⭐ Handle new chat creation
-      const newChatId = response.reply.chat_id;
-      if (!currentChatId && newChatId) {
-        console.log("🆕 New chat created:", newChatId);
-        setCurrentChatId(newChatId);
-        loadChats();
-      }
+        const assistantMessageId = `asst-${Date.now()}`;
+        const assistantMessage: ExtendedChatMessage = {
+            id: assistantMessageId,
+            role: "assistant",
+            content: response.reply.content,
+            message: response.reply.content,
+            timestamp: new Date().toISOString(),
+            chat_id: responseChatId,
+            user_id: user.id,
+            follow_up_suggestions: response.reply.follow_up_suggestions || [],
+            isTyping: true,
+            isNew: true,
+        };
+        
+        // Handle the state transition from a new chat to an existing one correctly
+        if (wasNewChat && responseChatId) {
+            // New chat has been created on the server, so we update the state atomically
+            
+            // 1. Update the messages in the view
+            setMessages(prevMessages => [...prevMessages, assistantMessage]);
+            
+            // 2. Move messages from the temporary '__new__' key to the permanent new chat ID
+            setMessagesByChat(prevMap => {
+                const tempMessages = prevMap["__new__"] || [];
+                const { __new__, ...rest } = prevMap; // Remove the temporary key
+                return {
+                    ...rest,
+                    [responseChatId]: [...tempMessages, assistantMessage],
+                };
+            });
+            
+            // 3. Set the current chat ID to the new one
+            setCurrentChatId(responseChatId);
+            
+            // 4. Refresh the conversation list
+            loadChats(); 
 
-      const messageId = `msg-${Date.now()}-${Math.random()}`;
-      const chatKey = currentChatId || newChatId || "__new__";
-      const suggestions = response.reply.follow_up_suggestions || [];
+        } else {
+            // This is an existing chat, update as normal
+            const chatKey = currentChatId!;
+            setMessages(prevMessages => [...prevMessages, assistantMessage]);
+            setMessagesByChat(prevMap => ({
+                ...prevMap,
+                [chatKey]: [...(prevMap[chatKey] || []), assistantMessage],
+            }));
+        }
 
-      // Store suggestions in ref
-      suggestionsMapRef.current.set(messageId, suggestions);
-
-      console.log("💾 Stored suggestions:", {
-        messageId,
-        suggestions,
-        count: suggestions.length,
-      });
-
-      const assistantMessage: ExtendedChatMessage = {
-        id: messageId,
-        role: "assistant",
-        content: response.reply.content,
-        message: response.reply.content,
-        timestamp: new Date().toISOString(),
-        chat_id: chatKey,
-        user_id: user.id,
-        follow_up_suggestions: suggestions,
-        isTyping: true,
-        isNew: true,
-      };
-
-      console.log("💬 Assistant message created:", {
-        id: assistantMessage.id,
-        chatId: chatKey,
-      });
-
-      setMessages((prev) => {
-        const newMessages = [...prev, assistantMessage];
-        setMessagesByChat((m) => ({ ...m, [chatKey]: newMessages }));
-        return newMessages;
-      });
     } catch (error) {
-      console.error("Failed to send message:", error);
-      toast.error("Failed to send message");
-
-      const fallbackMessage: ExtendedChatMessage = {
-        id: `error-${Date.now()}`,
-        role: "assistant",
-        content: "I'm sorry, but I'm unable to connect to the backend server.",
-        timestamp: new Date().toISOString(),
-        chat_id: currentChatId || "fallback",
-        message: "I'm sorry, but I'm unable to connect to the backend server.",
-        isTyping: false,
-        isNew: false,
-      };
-
-      setMessages((prev) => [...prev, fallbackMessage]);
+        console.error("Failed to send message:", error);
+        toast.error("Failed to send message");
+        const fallbackMessage: ExtendedChatMessage = {
+            id: `error-${Date.now()}`,
+            role: "assistant",
+            content: "I'm sorry, but I'm unable to connect to the backend server.",
+            timestamp: new Date().toISOString(),
+            chat_id: currentChatId || "fallback",
+            message: "I'm sorry, but I'm unable to connect to the backend server.",
+            isTyping: false,
+            isNew: false,
+        };
+        setMessages((prev) => [...prev, fallbackMessage]);
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
 
@@ -331,7 +328,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
       await apiService.deleteChat(chatId);
       setChats((prev) => prev.filter((chat) => chat.id !== chatId));
 
-      // Clean up message cache for deleted chat
       delete messagesByChat[chatId];
 
       if (currentChatId === chatId) {
@@ -357,7 +353,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
     newChatId?: string
   ) => {
     setUploadedFiles((prev) => [...prev, { name: filename, id: fileId }]);
-    setShowFileUpload(false);
 
     if (newChatId && !currentChatId) {
       console.log("📎 Setting chat ID from file upload:", newChatId);
@@ -431,7 +426,9 @@ export function ChatInterface({}: ChatInterfaceProps) {
                       <MessageSquare className="size-4 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate max-w-[180px]">
-                          {chat.title.length > 25 ? `${chat.title.substring(0, 25)}...` : chat.title}
+                          {chat.title.length > 25
+                            ? `${chat.title.substring(0, 25)}...`
+                            : chat.title}
                         </div>
                         {chat.level && (
                           <div className="text-xs text-muted-foreground truncate">
@@ -494,9 +491,6 @@ export function ChatInterface({}: ChatInterfaceProps) {
             <div>
               {messages.map((message, index) => {
                 const messageId = message.id || `msg-${index}`;
-                const chatKey = currentChatId || "__new__";
-
-                // Get suggestions from ref
                 const suggestionsFromRef =
                   suggestionsMapRef.current.get(messageId);
                 const messageSuggestions =
@@ -504,18 +498,12 @@ export function ChatInterface({}: ChatInterfaceProps) {
                     ? suggestionsFromRef || message.follow_up_suggestions || []
                     : [];
 
-                console.log(`📝 Rendering message ${index}:`, {
-                  id: messageId,
-                  role: message.role,
-                  content: message.content
-                });
-
                 return (
                   <ChatMessage
                     key={messageId}
                     message={{
                       role: message.role || "assistant",
-                      content: message.content || '',
+                      content: message.content || "",
                     }}
                     suggestions={messageSuggestions}
                     onSuggestionClick={handleSendMessage}
@@ -558,14 +546,13 @@ export function ChatInterface({}: ChatInterfaceProps) {
                     <Badge
                       key={file.id}
                       variant="secondary"
-                      className="gap-1.5 py-1"
+                      className="gap-1.5 py-1.5 px-3"
                     >
-                      <Paperclip className="size-3" />
-                      {file.name}
+                      <span className="text-xs">{file.name}</span>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="size-4 p-0 hover:bg-destructive hover:text-destructive-foreground rounded-full"
+                        className="size-4 p-0 hover:bg-destructive hover:text-destructive-foreground rounded-full ml-1"
                         onClick={() => removeUploadedFile(file.id)}
                       >
                         <X className="size-3" />
@@ -576,27 +563,12 @@ export function ChatInterface({}: ChatInterfaceProps) {
               </div>
             )}
 
-            {showFileUpload && (
-              <div className="mb-3 p-4 border border-border rounded-xl bg-muted/30">
+            <div className="relative">
+              <div className="flex items-end gap-2 p-3 border border-border rounded-2xl bg-background shadow-sm hover:shadow-md transition-shadow">
                 <FileUpload
                   chatId={currentChatId}
                   onFileUploaded={handleFileUploaded}
-                  onCancel={() => setShowFileUpload(false)}
                 />
-              </div>
-            )}
-
-            <div className="relative">
-              <div className="flex items-end gap-2 p-3 border border-border rounded-2xl bg-background shadow-sm hover:shadow-md transition-shadow">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 shrink-0 hover:bg-muted"
-                  onClick={() => setShowFileUpload(!showFileUpload)}
-                  title="Upload file"
-                >
-                  <Paperclip className="size-5 text-muted-foreground" />
-                </Button>
 
                 <Textarea
                   ref={textareaRef}

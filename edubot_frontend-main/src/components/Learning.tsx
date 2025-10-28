@@ -20,6 +20,7 @@ import {
   Lock,
   Award,
   XCircle,
+  Loader2,
 } from "lucide-react";
 import { apiService, Course, CourseSection } from "../services/api";
 import { toast } from "sonner";
@@ -102,7 +103,7 @@ interface QuizState {
  * ────────────────────────────────────────────────────────────────────────── */
 
 type RawBlob = {
-  topics?: string[]; // ["HTML","CSS",...]
+  topics?: string[];
   subtopics?: { subtitle: string; subexplanation: string }[];
   keypoints?: string[];
   key_points?: string[];
@@ -115,13 +116,10 @@ type RawBlob = {
 function safeTryParseJson<T = any>(text?: string): T | null {
   if (!text) return null;
   const trimmed = text.trim();
-  // quick check for a standalone JSON object
   if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || trimmed.includes('"topics"') || trimmed.includes('"videolinks"')) {
-    // Try full text first
     try {
       return JSON.parse(trimmed);
     } catch {
-      // Try to find a likely JSON object within the text (greedy but safe enough)
       const match = trimmed.match(/\{[\s\S]*\}/);
       if (match) {
         try {
@@ -136,23 +134,13 @@ function safeTryParseJson<T = any>(text?: string): T | null {
 }
 
 function normalizeFromBlob(blob: RawBlob) {
-  // Normalize keys and shape expected by UI
-  const video_links =
-    blob.video_links ||
-    blob.videolinks ||
-    [];
-
-  const key_points =
-    blob.key_points ||
-    blob.keypoints ||
-    [];
-
+  const video_links = blob.video_links || blob.videolinks || [];
+  const key_points = blob.key_points || blob.keypoints || [];
   let sub_topics: Array<{ subtitle: string; subexplanation: string }> = [];
 
   if (Array.isArray(blob.subtopics)) {
     sub_topics = blob.subtopics;
   } else if (Array.isArray(blob.topics)) {
-    // Convert ["HTML","CSS"] → [{subtitle, subexplanation:''}]
     sub_topics = blob.topics.map((t) => ({
       subtitle: t,
       subexplanation: "",
@@ -160,42 +148,33 @@ function normalizeFromBlob(blob: RawBlob) {
   }
 
   const introduction = blob.introduction || blob.description;
-
   return { video_links, key_points, sub_topics, introduction };
 }
 
 function stripJsonBlobFromText(text?: string): string | undefined {
   if (!text) return text;
-  // Remove the first JSON object found (handles the common case where blob is pasted inline)
   return text.replace(/\{[\s\S]*\}/, "").trim();
 }
 
-/** Minimal markdown → HTML (code fences + inline code) */
 function toHtmlContent(raw?: string): string {
   if (!raw) return "";
-  // Escape basic HTML to avoid injection, then re-open tags we add
   const escaped = raw
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-  // Code blocks ```...```
   const withBlocks = escaped.replace(
-    /```([\s\S]*?)```/g,
+    /``````/g,
     (_m, code) =>
       `<pre class="not-prose bg-muted p-4 rounded-lg overflow-x-auto"><code class="text-sm">${code}</code></pre>`
   );
-  // Inline code `...`
   const withInline = withBlocks.replace(
     /`([^`]+)`/g,
     (_m, code) => `<code class="bg-muted px-1 py-0.5 rounded text-sm">${code}</code>`
   );
-  // Newlines
   return withInline.replace(/\n/g, "<br />");
 }
 
-/** Merge backend response + any embedded JSON blob from introduction/content */
 function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailResponse) {
-  // Start with backend-provided normalized keys
   let merged: any = {
     ...sectionDetail,
     video_links: sectionDetail.video_links || sectionDetail.videolinks,
@@ -205,8 +184,6 @@ function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailR
 
   const introBlob = safeTryParseJson<RawBlob>(sectionDetail.introduction);
   const contentBlob = safeTryParseJson<RawBlob>(sectionDetail.content);
-
-  // Prefer content blob if present, otherwise introduction blob
   const blob = contentBlob || introBlob;
 
   if (blob) {
@@ -217,11 +194,9 @@ function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailR
     if (!merged.introduction && introduction) merged.introduction = introduction;
   }
 
-  // Strip JSON from original fields so we don’t render raw JSON
   merged.introduction = stripJsonBlobFromText(merged.introduction);
   merged.content = stripJsonBlobFromText(merged.content);
 
-  // Ensure arrays
   if (!Array.isArray(merged.video_links)) merged.video_links = [];
   if (!Array.isArray(merged.key_points)) merged.key_points = [];
   if (!Array.isArray(merged.sub_topics)) merged.sub_topics = [];
@@ -229,16 +204,13 @@ function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailR
   return merged;
 }
 
-/** ────────────────────────────────────────────────────────────────────────── */
-
 export function Learning() {
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("courses");
   const [courses, setCourses] = useState<Course[]>([]);
   const [sections, setSections] = useState<CourseSection[]>([]);
-  const [selectedCourseDetails, setSelectedCourseDetails] =
-    useState<Course | null>(null);
+  const [selectedCourseDetails, setSelectedCourseDetails] = useState<Course | null>(null);
   const [progress, setProgress] = useState<any>(null);
   const [learning, setLearning] = useState<LearningState>({
     selectedCourse: null,
@@ -247,12 +219,9 @@ export function Learning() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isEnrolling, setIsEnrolling] = useState(false);
-  const [completingSection, setCompletingSection] = useState<string | null>(
-    null
-  );
-  const [deleteDialogCourse, setDeleteDialogCourse] = useState<Course | null>(
-    null
-  );
+  const [completingSection, setCompletingSection] = useState<string | null>(null);
+  const [deleteDialogCourse, setDeleteDialogCourse] = useState<Course | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
   const [quizState, setQuizState] = useState<QuizState>({
     questions: [],
     currentQuestionIndex: 0,
@@ -262,7 +231,6 @@ export function Learning() {
     totalQuestions: 5,
   });
   const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
-
   const isUpdatingRef = useRef(false);
   const localCompletedSectionsRef = useRef<Set<string>>(new Set());
 
@@ -295,9 +263,7 @@ export function Learning() {
           apiService.getCourseProgress(courseId).catch(() => null),
         ]);
 
-      const isCurrentUserEnrolled =
-        progressResponse?.progress?.enrolled || false;
-
+      const isCurrentUserEnrolled = progressResponse?.progress?.enrolled || false;
       const courseWithCorrectEnrollment = {
         ...courseResponse.course,
         is_enrolled: isCurrentUserEnrolled,
@@ -320,21 +286,26 @@ export function Learning() {
   };
 
   const handleDeleteCourse = async (courseId: string) => {
+    if (!deleteDialogCourse) return;
+
     try {
+      setIsDeletingCourse(true);
       await apiService.deleteCourse(courseId);
-      toast.success("Course deleted successfully");
+
       setDeleteDialogCourse(null);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      toast.success("Course deleted successfully");
       await loadCourses();
     } catch (error) {
       console.error("Failed to delete course:", error);
-      toast.error("Failed to delete course");
+      toast.error("Failed to delete course. Please try again.");
+    } finally {
+      setIsDeletingCourse(false);
     }
   };
 
-  const generateQuiz = async (
-    courseId: string,
-    sectionId: string
-  ): Promise<QuizQuestion[]> => {
+  const generateQuiz = async (courseId: string, sectionId: string): Promise<QuizQuestion[]> => {
     try {
       setIsLoadingQuiz(true);
       const response = await apiService.generateSectionQuiz(courseId, sectionId);
@@ -409,7 +380,6 @@ export function Learning() {
     }
   };
 
-  // Submit quiz to backend API for validation
   const handleQuizSubmit = async () => {
     if (!learning.selectedCourse || !learning.selectedSection) {
       toast.error("Course or section not found");
@@ -457,7 +427,6 @@ export function Learning() {
         learning.selectedSection!.id
       );
 
-      // Move to next section automatically
       if (learning.currentSectionIndex < sections.length - 1) {
         const nextIndex = learning.currentSectionIndex + 1;
         const nextSection = sections[nextIndex];
@@ -476,16 +445,13 @@ export function Learning() {
   };
 
   const handleCompleteSection = async (courseId: string, sectionId: string) => {
-    if (isUpdatingRef.current) {
-      return;
-    }
+    if (isUpdatingRef.current) return;
 
     isUpdatingRef.current = true;
     setCompletingSection(sectionId);
 
     try {
       localCompletedSectionsRef.current.add(sectionId);
-
       await apiService.completeSection(courseId, sectionId);
       toast.success("Section completed! 🎉");
 
@@ -509,17 +475,12 @@ export function Learning() {
         sectionsResponse = responses[1];
         progressResponse = responses[2];
 
-        const backendCompletedRaw =
-          progressResponse?.progress?.completed_sections || [];
-        const backendCompletedArray = Array.isArray(backendCompletedRaw)
-          ? backendCompletedRaw
-          : [];
+        const backendCompletedRaw = progressResponse?.progress?.completed_sections || [];
+        const backendCompletedArray = Array.isArray(backendCompletedRaw) ? backendCompletedRaw : [];
         const backendCompleted = new Set(backendCompletedArray);
         const backendHasSection = backendCompleted.has(sectionId);
 
-        if (backendHasSection) {
-          break;
-        }
+        if (backendHasSection) break;
 
         attempts++;
         if (attempts < maxAttempts) {
@@ -527,18 +488,14 @@ export function Learning() {
         }
       }
 
-      const isCurrentUserEnrolled =
-        progressResponse?.progress?.enrolled || false;
+      const isCurrentUserEnrolled = progressResponse?.progress?.enrolled || false;
       const courseWithCorrectEnrollment = {
         ...courseResponse.course,
         is_enrolled: isCurrentUserEnrolled,
       };
 
-      const backendCompletedSectionsRaw =
-        progressResponse?.progress?.completed_sections || [];
-      const backendCompletedSections = Array.isArray(backendCompletedSectionsRaw)
-        ? backendCompletedSectionsRaw
-        : [];
+      const backendCompletedSectionsRaw = progressResponse?.progress?.completed_sections || [];
+      const backendCompletedSections = Array.isArray(backendCompletedSectionsRaw) ? backendCompletedSectionsRaw : [];
       const mergedCompleted = Array.from(
         new Set([
           ...backendCompletedSections,
@@ -548,13 +505,9 @@ export function Learning() {
 
       localCompletedSectionsRef.current = new Set(mergedCompleted);
 
-      const totalSections =
-        progressResponse?.progress?.total_sections ||
-        sectionsResponse.sections.length;
+      const totalSections = progressResponse?.progress?.total_sections || sectionsResponse.sections.length;
       const backendProgress = progressResponse?.progress?.progress ?? 0;
-
-      const calculatedProgress =
-        totalSections > 0 ? (mergedCompleted.length / totalSections) * 100 : 0;
+      const calculatedProgress = totalSections > 0 ? (mergedCompleted.length / totalSections) * 100 : 0;
       const finalProgress = Math.max(backendProgress, calculatedProgress);
 
       const updatedProgress = {
@@ -568,11 +521,7 @@ export function Learning() {
       setSections(sectionsResponse.sections);
       setProgress(updatedProgress);
 
-      const sectionDetail = (await apiService.getSectionDetail(
-        courseId,
-        sectionId
-      )) as ApiSectionDetail & SectionDetailResponse;
-
+      const sectionDetail = (await apiService.getSectionDetail(courseId, sectionId)) as ApiSectionDetail & SectionDetailResponse;
       const formattedSection = {
         ...normalizeSectionDetail(sectionDetail),
         is_completed: true,
@@ -600,10 +549,7 @@ export function Learning() {
     await loadCourseDetails(course.id);
   };
 
-  const handleSectionSelect = async (
-    section: CourseSection,
-    index: number
-  ) => {
+  const handleSectionSelect = async (section: CourseSection, index: number) => {
     if (isUpdatingRef.current) {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
@@ -615,13 +561,8 @@ export function Learning() {
           .catch(() => null);
 
         if (progressResponse) {
-          const backendCompletedSectionsRaw =
-            progressResponse?.progress?.completed_sections || [];
-          const backendCompletedSections = Array.isArray(
-            backendCompletedSectionsRaw
-          )
-            ? backendCompletedSectionsRaw
-            : [];
+          const backendCompletedSectionsRaw = progressResponse?.progress?.completed_sections || [];
+          const backendCompletedSections = Array.isArray(backendCompletedSectionsRaw) ? backendCompletedSectionsRaw : [];
 
           const mergedCompleted = Array.from(
             new Set([
@@ -630,13 +571,9 @@ export function Learning() {
             ])
           );
 
-          const totalSections =
-            progressResponse?.progress?.total_sections || sections.length;
+          const totalSections = progressResponse?.progress?.total_sections || sections.length;
           const backendProgress = progressResponse?.progress?.progress ?? 0;
-          const calculatedProgress =
-            totalSections > 0
-              ? (mergedCompleted.length / totalSections) * 100
-              : 0;
+          const calculatedProgress = totalSections > 0 ? (mergedCompleted.length / totalSections) * 100 : 0;
           const finalProgress = Math.max(backendProgress, calculatedProgress);
 
           const updatedProgress = {
@@ -695,9 +632,7 @@ export function Learning() {
 
   const handleNextSection = async () => {
     const completedSectionsListRaw = progress?.completed_sections ?? [];
-    const completedSectionsList = Array.isArray(completedSectionsListRaw)
-      ? completedSectionsListRaw
-      : [];
+    const completedSectionsList = Array.isArray(completedSectionsListRaw) ? completedSectionsListRaw : [];
     const currentSection = learning.selectedSection;
     const isCurrentCompleted =
       currentSection?.is_completed ||
@@ -776,11 +711,9 @@ export function Learning() {
   // Quiz View
   if (viewMode === "quiz") {
     const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
-    const isLastQuestion =
-      quizState.currentQuestionIndex === quizState.questions.length - 1;
+    const isLastQuestion = quizState.currentQuestionIndex === quizState.questions.length - 1;
     const hasAnsweredCurrent = !!quizState.selectedAnswers[currentQuestion?.id];
-    const allQuestionsAnswered =
-      Object.keys(quizState.selectedAnswers).length === quizState.questions.length;
+    const allQuestionsAnswered = Object.keys(quizState.selectedAnswers).length === quizState.questions.length;
 
     if (isLoadingQuiz) {
       return (
@@ -805,16 +738,10 @@ export function Learning() {
             <CardContent className="p-8 text-center">
               <div
                 className={`size-24 mx-auto mb-6 rounded-full flex items-center justify-center ${
-                  passed
-                    ? "bg-green-100 text-green-600"
-                    : "bg-red-100 text-red-600"
+                  passed ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
                 }`}
               >
-                {passed ? (
-                  <Trophy className="size-12" />
-                ) : (
-                  <XCircle className="size-12" />
-                )}
+                {passed ? <Trophy className="size-12" /> : <XCircle className="size-12" />}
               </div>
               <h2 className="text-3xl font-bold mb-4">
                 {passed ? "Congratulations! 🎉" : "Keep Learning! 📚"}
@@ -879,9 +806,7 @@ export function Learning() {
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h1 className="text-2xl font-semibold text-foreground">
-                  Section Quiz
-                </h1>
+                <h1 className="text-2xl font-semibold text-foreground">Section Quiz</h1>
                 <p className="text-muted-foreground">
                   Complete this quiz to finish the section
                 </p>
@@ -892,9 +817,7 @@ export function Learning() {
             </div>
             <Progress
               value={
-                ((quizState.currentQuestionIndex + 1) /
-                  quizState.questions.length) *
-                100
+                ((quizState.currentQuestionIndex + 1) / quizState.questions.length) * 100
               }
               className="h-2"
             />
@@ -906,13 +829,9 @@ export function Learning() {
             {currentQuestion && (
               <Card className="mb-6">
                 <CardHeader>
-                  <CardTitle className="text-xl">
-                    {currentQuestion.question}
-                  </CardTitle>
+                  <CardTitle className="text-xl">{currentQuestion.question}</CardTitle>
                   <Badge variant="outline" className="w-fit">
-                    {currentQuestion.type === "mcq"
-                      ? "Multiple Choice"
-                      : "True/False"}
+                    {currentQuestion.type === "mcq" ? "Multiple Choice" : "True/False"}
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -924,21 +843,17 @@ export function Learning() {
                           ? "border-primary bg-primary/10"
                           : "border-border hover:border-primary/50"
                       }`}
-                      onClick={() =>
-                        handleQuizAnswerSelect(currentQuestion.id, option)
-                      }
+                      onClick={() => handleQuizAnswerSelect(currentQuestion.id, option)}
                     >
                       <div className="flex items-center gap-3">
                         <div
                           className={`size-5 rounded-full border-2 flex items-center justify-center ${
-                            quizState.selectedAnswers[currentQuestion.id] ===
-                            option
+                            quizState.selectedAnswers[currentQuestion.id] === option
                               ? "border-primary bg-primary"
                               : "border-border"
                           }`}
                         >
-                          {quizState.selectedAnswers[currentQuestion.id] ===
-                            option && (
+                          {quizState.selectedAnswers[currentQuestion.id] === option && (
                             <div className="size-2 bg-white rounded-full" />
                           )}
                         </div>
@@ -963,8 +878,7 @@ export function Learning() {
               Previous
             </Button>
             <div className="text-sm text-muted-foreground">
-              {Object.keys(quizState.selectedAnswers).length} /{" "}
-              {quizState.questions.length} answered
+              {Object.keys(quizState.selectedAnswers).length} / {quizState.questions.length} answered
             </div>
             {!isLastQuestion ? (
               <Button
@@ -1017,18 +931,12 @@ export function Learning() {
               </div>
               <div className="flex items-center gap-2">
                 <Users className="size-4" />
-                <span>
-                  {courses.filter((c) => c.is_enrolled).length} enrolled
-                </span>
+                <span>{courses.filter((c) => c.is_enrolled).length} enrolled</span>
               </div>
               <div className="flex items-center gap-2">
                 <Trophy className="size-4" />
                 <span>
-                  {courses.reduce(
-                    (sum, c) => sum + (c.completed_sections || 0),
-                    0
-                  )}{" "}
-                  sections completed
+                  {courses.reduce((sum, c) => sum + (c.completed_sections || 0), 0)} sections completed
                 </span>
               </div>
             </div>
@@ -1040,13 +948,26 @@ export function Learning() {
               {courses.map((course) => {
                 const progressPercentage = course.progress_percentage ?? 0;
                 const completedSections = course.completed_sections ?? 0;
-                const totalSections =
-                  course.total_sections ?? course.sections_count ?? 0;
+                const totalSections = course.total_sections ?? course.sections_count ?? 0;
                 return (
                   <Card
                     key={course.id}
-                    className="group transition-all hover:shadow-lg border-border hover:border-primary/20"
+                    className="group transition-all hover:shadow-lg border-border hover:border-primary/20 relative"
                   >
+                    {/* Delete Button - Top Left */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute top-2 right-2 z-10 size-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteDialogCourse(course);
+                      }}
+                      disabled={isDeletingCourse}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+
                     <CardHeader
                       className="pb-3 cursor-pointer"
                       onClick={() => handleCourseSelect(course)}
@@ -1071,35 +992,17 @@ export function Learning() {
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="space-y-3">
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="w-full opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteDialogCourse(course);
-                          }}
-                        >
-                          <Trash2 className="size-4 mr-2" />
-                          Delete Course
-                        </Button>
                         {course.is_enrolled && (
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">
-                                Progress
-                              </span>
+                              <span className="text-muted-foreground">Progress</span>
                               <span className="font-medium">
                                 {Math.round(progressPercentage)}%
                               </span>
                             </div>
-                            <Progress
-                              value={progressPercentage}
-                              className="h-2"
-                            />
+                            <Progress value={progressPercentage} className="h-2" />
                             <div className="text-xs text-muted-foreground">
-                              {completedSections} of {totalSections} sections
-                              completed
+                              {completedSections} of {totalSections} sections completed
                             </div>
                           </div>
                         )}
@@ -1111,9 +1014,7 @@ export function Learning() {
                           <div className="flex items-center gap-1">
                             <Clock className="size-3" />
                             <span>
-                              {course.updated_at
-                                ? formatDate(course.updated_at)
-                                : "N/A"}
+                              {course.updated_at ? formatDate(course.updated_at) : "N/A"}
                             </span>
                           </div>
                         </div>
@@ -1136,33 +1037,44 @@ export function Learning() {
             )}
           </div>
         </ScrollArea>
+
+        {/* Delete Confirmation Dialog */}
         {deleteDialogCourse && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div
               className="absolute inset-0 bg-black/50"
-              onClick={() => setDeleteDialogCourse(null)}
+              onClick={() => !isDeletingCourse && setDeleteDialogCourse(null)}
             />
             <div className="relative bg-background rounded-lg shadow-lg max-w-md w-full mx-4 p-6 z-10">
               <h2 className="text-lg font-semibold mb-2">Are you sure?</h2>
               <p className="text-sm text-muted-foreground mb-6">
-                This action cannot be undone. This will permanently delete the
-                course "{deleteDialogCourse.title}" and all of its data.
+                This action cannot be undone. This will permanently delete the course{" "}
+                <span className="font-medium text-foreground">
+                  "{deleteDialogCourse.title}"
+                </span>{" "}
+                and all of its data.
               </p>
               <div className="flex justify-end gap-3">
                 <Button
                   variant="outline"
                   onClick={() => setDeleteDialogCourse(null)}
+                  disabled={isDeletingCourse}
                 >
                   Cancel
                 </Button>
                 <Button
                   variant="destructive"
-                  onClick={() => {
-                    if (deleteDialogCourse)
-                      handleDeleteCourse(deleteDialogCourse.id);
-                  }}
+                  onClick={() => handleDeleteCourse(deleteDialogCourse.id)}
+                  disabled={isDeletingCourse}
                 >
-                  Delete
+                  {isDeletingCourse ? (
+                    <>
+                      <Loader2 className="size-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    "Delete"
+                  )}
                 </Button>
               </div>
             </div>
@@ -1171,6 +1083,12 @@ export function Learning() {
       </div>
     );
   }
+
+//   // Course Details View - Continue with existing code...
+//   // Section Learning View - Continue with existing code...
+  
+//   return null;
+// }
 
   // Course Details View
   if (viewMode === "course-details" && selectedCourseDetails) {

@@ -231,6 +231,7 @@ export function Learning() {
     totalQuestions: 5,
   });
   const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
+  const [videoError, setVideoError] = useState<{ [key: string]: boolean }>({});
   const isUpdatingRef = useRef(false);
   const localCompletedSectionsRef = useRef<Set<string>>(new Set());
 
@@ -708,7 +709,7 @@ export function Learning() {
     );
   }
 
-  // Quiz View
+  // Quiz View (keeping existing code)
   if (viewMode === "quiz") {
     const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
     const isLastQuestion = quizState.currentQuestionIndex === quizState.questions.length - 1;
@@ -905,7 +906,7 @@ export function Learning() {
     );
   }
 
-  // Courses List View
+  // Courses List View (keeping existing code with delete dialog)
   if (viewMode === "courses") {
     return (
       <div className="h-full flex flex-col bg-background">
@@ -954,7 +955,6 @@ export function Learning() {
                     key={course.id}
                     className="group transition-all hover:shadow-lg border-border hover:border-primary/20 relative"
                   >
-                    {/* Delete Button - Top Left */}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1084,13 +1084,7 @@ export function Learning() {
     );
   }
 
-//   // Course Details View - Continue with existing code...
-//   // Section Learning View - Continue with existing code...
-  
-//   return null;
-// }
-
-  // Course Details View
+  // Course Details View (keeping existing code)
   if (viewMode === "course-details" && selectedCourseDetails) {
     const isEnrolled = selectedCourseDetails.is_enrolled;
     const courseProgress = progress?.progress ?? 0;
@@ -1273,7 +1267,7 @@ export function Learning() {
     );
   }
 
-  // Section Learning View
+  // Section Learning View - WITH FIXED YOUTUBE EMBED
   if (
     viewMode === "section-learning" &&
     learning.selectedSection &&
@@ -1372,9 +1366,10 @@ export function Learning() {
                               .split("?")[0];
                           }
                           if (!videoId) return null;
-                          const videoSrc = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&color=white&origin=${
-                            window.location.origin
-                          }${activeVideo === videoId ? "&autoplay=1" : ""}`;
+
+                          // FIXED: Use youtube-nocookie.com and add proper parameters
+                          const videoSrc = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&color=white&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}${activeVideo === videoId ? "&autoplay=1" : ""}`;
+
                           return (
                             <Card key={`video-${index}`}>
                               <CardHeader>
@@ -1390,13 +1385,18 @@ export function Learning() {
                                   }
                                 >
                                   <div className="w-full" style={{ height: '520px' }}>
+                                    {/* FIXED: Added sandbox and proper allow attributes */}
                                     <iframe
                                       src={videoSrc}
                                       title={video.title}
                                       frameBorder="0"
+                                      sandbox="allow-scripts allow-same-origin allow-presentation"
                                       allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
                                       allowFullScreen
                                       className="w-full h-full"
+                                      onError={() => {
+                                        setVideoError(prev => ({ ...prev, [videoId!]: true }));
+                                      }}
                                     />
                                   </div>
                                   {activeVideo !== videoId && (
@@ -1405,6 +1405,23 @@ export function Learning() {
                                     </div>
                                   )}
                                 </div>
+                                {/* Error Fallback */}
+                                {videoError[videoId] && (
+                                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <p className="text-sm text-yellow-800">
+                                      Unable to load video. Please{" "}
+                                      <a 
+                                        href={`https://www.youtube.com/watch?v=${videoId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 underline hover:text-blue-800"
+                                      >
+                                        watch on YouTube
+                                      </a>
+                                      {" "}or enable third-party cookies.
+                                    </p>
+                                  </div>
+                                )}
                                 <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
                                   <div className="flex items-center gap-2">
                                     <Clock className="size-4" />
@@ -1436,7 +1453,7 @@ export function Learning() {
                             <li key={index}>{point}</li>
                           )
                         )}
-                      </ul> 
+                      </ul>
                     </>
                   )}
                 {learning.selectedSection.content && (

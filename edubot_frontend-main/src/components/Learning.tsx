@@ -1436,7 +1436,7 @@ export function Learning() {
                             <li key={index}>{point}</li>
                           )
                         )}
-                      </ul>
+                      </ul> 
                     </>
                   )}
                 {learning.selectedSection.content && (

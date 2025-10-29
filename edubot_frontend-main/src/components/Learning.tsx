@@ -107,8 +107,18 @@ type RawBlob = {
   subtopics?: { subtitle: string; subexplanation: string }[];
   keypoints?: string[];
   key_points?: string[];
-  videolinks?: Array<{ title: string; link: string; duration?: string; topic?: string }>;
-  video_links?: Array<{ title: string; link: string; duration?: string; topic?: string }>;
+  videolinks?: Array<{
+    title: string;
+    link: string;
+    duration?: string;
+    topic?: string;
+  }>;
+  video_links?: Array<{
+    title: string;
+    link: string;
+    duration?: string;
+    topic?: string;
+  }>;
   introduction?: string;
   description?: string;
 };
@@ -116,7 +126,11 @@ type RawBlob = {
 function safeTryParseJson<T = any>(text?: string): T | null {
   if (!text) return null;
   const trimmed = text.trim();
-  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || trimmed.includes('"topics"') || trimmed.includes('"videolinks"')) {
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    trimmed.includes('"topics"') ||
+    trimmed.includes('"videolinks"')
+  ) {
     try {
       return JSON.parse(trimmed);
     } catch {
@@ -169,12 +183,15 @@ function toHtmlContent(raw?: string): string {
   );
   const withInline = withBlocks.replace(
     /`([^`]+)`/g,
-    (_m, code) => `<code class="bg-muted px-1 py-0.5 rounded text-sm">${code}</code>`
+    (_m, code) =>
+      `<code class="bg-muted px-1 py-0.5 rounded text-sm">${code}</code>`
   );
   return withInline.replace(/\n/g, "<br />");
 }
 
-function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailResponse) {
+function normalizeSectionDetail(
+  sectionDetail: ApiSectionDetail & SectionDetailResponse
+) {
   let merged: any = {
     ...sectionDetail,
     video_links: sectionDetail.video_links || sectionDetail.videolinks,
@@ -187,11 +204,13 @@ function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailR
   const blob = contentBlob || introBlob;
 
   if (blob) {
-    const { video_links, key_points, sub_topics, introduction } = normalizeFromBlob(blob);
+    const { video_links, key_points, sub_topics, introduction } =
+      normalizeFromBlob(blob);
     merged.video_links = merged.video_links || video_links;
     merged.key_points = merged.key_points || key_points;
     merged.sub_topics = merged.sub_topics || sub_topics;
-    if (!merged.introduction && introduction) merged.introduction = introduction;
+    if (!merged.introduction && introduction)
+      merged.introduction = introduction;
   }
 
   merged.introduction = stripJsonBlobFromText(merged.introduction);
@@ -210,7 +229,8 @@ export function Learning() {
   const [viewMode, setViewMode] = useState<ViewMode>("courses");
   const [courses, setCourses] = useState<Course[]>([]);
   const [sections, setSections] = useState<CourseSection[]>([]);
-  const [selectedCourseDetails, setSelectedCourseDetails] = useState<Course | null>(null);
+  const [selectedCourseDetails, setSelectedCourseDetails] =
+    useState<Course | null>(null);
   const [progress, setProgress] = useState<any>(null);
   const [learning, setLearning] = useState<LearningState>({
     selectedCourse: null,
@@ -219,8 +239,12 @@ export function Learning() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isEnrolling, setIsEnrolling] = useState(false);
-  const [completingSection, setCompletingSection] = useState<string | null>(null);
-  const [deleteDialogCourse, setDeleteDialogCourse] = useState<Course | null>(null);
+  const [completingSection, setCompletingSection] = useState<string | null>(
+    null
+  );
+  const [deleteDialogCourse, setDeleteDialogCourse] = useState<Course | null>(
+    null
+  );
   const [isDeletingCourse, setIsDeletingCourse] = useState(false);
   const [quizState, setQuizState] = useState<QuizState>({
     questions: [],
@@ -264,7 +288,8 @@ export function Learning() {
           apiService.getCourseProgress(courseId).catch(() => null),
         ]);
 
-      const isCurrentUserEnrolled = progressResponse?.progress?.enrolled || false;
+      const isCurrentUserEnrolled =
+        progressResponse?.progress?.enrolled || false;
       const courseWithCorrectEnrollment = {
         ...courseResponse.course,
         is_enrolled: isCurrentUserEnrolled,
@@ -294,8 +319,8 @@ export function Learning() {
       await apiService.deleteCourse(courseId);
 
       setDeleteDialogCourse(null);
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       toast.success("Course deleted successfully");
       await loadCourses();
     } catch (error) {
@@ -306,10 +331,16 @@ export function Learning() {
     }
   };
 
-  const generateQuiz = async (courseId: string, sectionId: string): Promise<QuizQuestion[]> => {
+  const generateQuiz = async (
+    courseId: string,
+    sectionId: string
+  ): Promise<QuizQuestion[]> => {
     try {
       setIsLoadingQuiz(true);
-      const response = await apiService.generateSectionQuiz(courseId, sectionId);
+      const response = await apiService.generateSectionQuiz(
+        courseId,
+        sectionId
+      );
       return response.questions || [];
     } catch (error) {
       console.error("Failed to generate quiz:", error);
@@ -476,8 +507,11 @@ export function Learning() {
         sectionsResponse = responses[1];
         progressResponse = responses[2];
 
-        const backendCompletedRaw = progressResponse?.progress?.completed_sections || [];
-        const backendCompletedArray = Array.isArray(backendCompletedRaw) ? backendCompletedRaw : [];
+        const backendCompletedRaw =
+          progressResponse?.progress?.completed_sections || [];
+        const backendCompletedArray = Array.isArray(backendCompletedRaw)
+          ? backendCompletedRaw
+          : [];
         const backendCompleted = new Set(backendCompletedArray);
         const backendHasSection = backendCompleted.has(sectionId);
 
@@ -489,14 +523,20 @@ export function Learning() {
         }
       }
 
-      const isCurrentUserEnrolled = progressResponse?.progress?.enrolled || false;
+      const isCurrentUserEnrolled =
+        progressResponse?.progress?.enrolled || false;
       const courseWithCorrectEnrollment = {
         ...courseResponse.course,
         is_enrolled: isCurrentUserEnrolled,
       };
 
-      const backendCompletedSectionsRaw = progressResponse?.progress?.completed_sections || [];
-      const backendCompletedSections = Array.isArray(backendCompletedSectionsRaw) ? backendCompletedSectionsRaw : [];
+      const backendCompletedSectionsRaw =
+        progressResponse?.progress?.completed_sections || [];
+      const backendCompletedSections = Array.isArray(
+        backendCompletedSectionsRaw
+      )
+        ? backendCompletedSectionsRaw
+        : [];
       const mergedCompleted = Array.from(
         new Set([
           ...backendCompletedSections,
@@ -506,9 +546,12 @@ export function Learning() {
 
       localCompletedSectionsRef.current = new Set(mergedCompleted);
 
-      const totalSections = progressResponse?.progress?.total_sections || sectionsResponse.sections.length;
+      const totalSections =
+        progressResponse?.progress?.total_sections ||
+        sectionsResponse.sections.length;
       const backendProgress = progressResponse?.progress?.progress ?? 0;
-      const calculatedProgress = totalSections > 0 ? (mergedCompleted.length / totalSections) * 100 : 0;
+      const calculatedProgress =
+        totalSections > 0 ? (mergedCompleted.length / totalSections) * 100 : 0;
       const finalProgress = Math.max(backendProgress, calculatedProgress);
 
       const updatedProgress = {
@@ -522,7 +565,10 @@ export function Learning() {
       setSections(sectionsResponse.sections);
       setProgress(updatedProgress);
 
-      const sectionDetail = (await apiService.getSectionDetail(courseId, sectionId)) as ApiSectionDetail & SectionDetailResponse;
+      const sectionDetail = (await apiService.getSectionDetail(
+        courseId,
+        sectionId
+      )) as ApiSectionDetail & SectionDetailResponse;
       const formattedSection = {
         ...normalizeSectionDetail(sectionDetail),
         is_completed: true,
@@ -562,8 +608,13 @@ export function Learning() {
           .catch(() => null);
 
         if (progressResponse) {
-          const backendCompletedSectionsRaw = progressResponse?.progress?.completed_sections || [];
-          const backendCompletedSections = Array.isArray(backendCompletedSectionsRaw) ? backendCompletedSectionsRaw : [];
+          const backendCompletedSectionsRaw =
+            progressResponse?.progress?.completed_sections || [];
+          const backendCompletedSections = Array.isArray(
+            backendCompletedSectionsRaw
+          )
+            ? backendCompletedSectionsRaw
+            : [];
 
           const mergedCompleted = Array.from(
             new Set([
@@ -572,9 +623,13 @@ export function Learning() {
             ])
           );
 
-          const totalSections = progressResponse?.progress?.total_sections || sections.length;
+          const totalSections =
+            progressResponse?.progress?.total_sections || sections.length;
           const backendProgress = progressResponse?.progress?.progress ?? 0;
-          const calculatedProgress = totalSections > 0 ? (mergedCompleted.length / totalSections) * 100 : 0;
+          const calculatedProgress =
+            totalSections > 0
+              ? (mergedCompleted.length / totalSections) * 100
+              : 0;
           const finalProgress = Math.max(backendProgress, calculatedProgress);
 
           const updatedProgress = {
@@ -633,7 +688,9 @@ export function Learning() {
 
   const handleNextSection = async () => {
     const completedSectionsListRaw = progress?.completed_sections ?? [];
-    const completedSectionsList = Array.isArray(completedSectionsListRaw) ? completedSectionsListRaw : [];
+    const completedSectionsList = Array.isArray(completedSectionsListRaw)
+      ? completedSectionsListRaw
+      : [];
     const currentSection = learning.selectedSection;
     const isCurrentCompleted =
       currentSection?.is_completed ||
@@ -712,9 +769,12 @@ export function Learning() {
   // Quiz View (keeping existing code)
   if (viewMode === "quiz") {
     const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
-    const isLastQuestion = quizState.currentQuestionIndex === quizState.questions.length - 1;
+    const isLastQuestion =
+      quizState.currentQuestionIndex === quizState.questions.length - 1;
     const hasAnsweredCurrent = !!quizState.selectedAnswers[currentQuestion?.id];
-    const allQuestionsAnswered = Object.keys(quizState.selectedAnswers).length === quizState.questions.length;
+    const allQuestionsAnswered =
+      Object.keys(quizState.selectedAnswers).length ===
+      quizState.questions.length;
 
     if (isLoadingQuiz) {
       return (
@@ -724,7 +784,9 @@ export function Learning() {
               <Award className="text-white size-8" />
             </div>
             <p className="text-muted-foreground">
-              {quizState.showResult ? "Submitting quiz..." : "Generating quiz..."}
+              {quizState.showResult
+                ? "Submitting quiz..."
+                : "Generating quiz..."}
             </p>
           </div>
         </div>
@@ -739,10 +801,16 @@ export function Learning() {
             <CardContent className="p-8 text-center">
               <div
                 className={`size-24 mx-auto mb-6 rounded-full flex items-center justify-center ${
-                  passed ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+                  passed
+                    ? "bg-green-100 text-green-600"
+                    : "bg-red-100 text-red-600"
                 }`}
               >
-                {passed ? <Trophy className="size-12" /> : <XCircle className="size-12" />}
+                {passed ? (
+                  <Trophy className="size-12" />
+                ) : (
+                  <XCircle className="size-12" />
+                )}
               </div>
               <h2 className="text-3xl font-bold mb-4">
                 {passed ? "Congratulations! 🎉" : "Keep Learning! 📚"}
@@ -758,7 +826,8 @@ export function Learning() {
                 {passed ? (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
                     <p className="text-green-800 font-medium">
-                      ✅ Great job! You've passed the quiz and completed this section.
+                      ✅ Great job! You've passed the quiz and completed this
+                      section.
                     </p>
                     <p className="text-green-700 text-sm mt-2">
                       Moving to the next section...
@@ -807,18 +876,23 @@ export function Learning() {
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h1 className="text-2xl font-semibold text-foreground">Section Quiz</h1>
+                <h1 className="text-2xl font-semibold text-foreground">
+                  Section Quiz
+                </h1>
                 <p className="text-muted-foreground">
                   Complete this quiz to finish the section
                 </p>
               </div>
               <Badge variant="outline" className="text-lg px-4 py-2">
-                {quizState.currentQuestionIndex + 1} / {quizState.questions.length}
+                {quizState.currentQuestionIndex + 1} /{" "}
+                {quizState.questions.length}
               </Badge>
             </div>
             <Progress
               value={
-                ((quizState.currentQuestionIndex + 1) / quizState.questions.length) * 100
+                ((quizState.currentQuestionIndex + 1) /
+                  quizState.questions.length) *
+                100
               }
               className="h-2"
             />
@@ -830,9 +904,13 @@ export function Learning() {
             {currentQuestion && (
               <Card className="mb-6">
                 <CardHeader>
-                  <CardTitle className="text-xl">{currentQuestion.question}</CardTitle>
+                  <CardTitle className="text-xl">
+                    {currentQuestion.question}
+                  </CardTitle>
                   <Badge variant="outline" className="w-fit">
-                    {currentQuestion.type === "mcq" ? "Multiple Choice" : "True/False"}
+                    {currentQuestion.type === "mcq"
+                      ? "Multiple Choice"
+                      : "True/False"}
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -844,17 +922,21 @@ export function Learning() {
                           ? "border-primary bg-primary/10"
                           : "border-border hover:border-primary/50"
                       }`}
-                      onClick={() => handleQuizAnswerSelect(currentQuestion.id, option)}
+                      onClick={() =>
+                        handleQuizAnswerSelect(currentQuestion.id, option)
+                      }
                     >
                       <div className="flex items-center gap-3">
                         <div
                           className={`size-5 rounded-full border-2 flex items-center justify-center ${
-                            quizState.selectedAnswers[currentQuestion.id] === option
+                            quizState.selectedAnswers[currentQuestion.id] ===
+                            option
                               ? "border-primary bg-primary"
                               : "border-border"
                           }`}
                         >
-                          {quizState.selectedAnswers[currentQuestion.id] === option && (
+                          {quizState.selectedAnswers[currentQuestion.id] ===
+                            option && (
                             <div className="size-2 bg-white rounded-full" />
                           )}
                         </div>
@@ -879,7 +961,8 @@ export function Learning() {
               Previous
             </Button>
             <div className="text-sm text-muted-foreground">
-              {Object.keys(quizState.selectedAnswers).length} / {quizState.questions.length} answered
+              {Object.keys(quizState.selectedAnswers).length} /{" "}
+              {quizState.questions.length} answered
             </div>
             {!isLastQuestion ? (
               <Button
@@ -932,12 +1015,18 @@ export function Learning() {
               </div>
               <div className="flex items-center gap-2">
                 <Users className="size-4" />
-                <span>{courses.filter((c) => c.is_enrolled).length} enrolled</span>
+                <span>
+                  {courses.filter((c) => c.is_enrolled).length} enrolled
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <Trophy className="size-4" />
                 <span>
-                  {courses.reduce((sum, c) => sum + (c.completed_sections || 0), 0)} sections completed
+                  {courses.reduce(
+                    (sum, c) => sum + (c.completed_sections || 0),
+                    0
+                  )}{" "}
+                  sections completed
                 </span>
               </div>
             </div>
@@ -949,7 +1038,8 @@ export function Learning() {
               {courses.map((course) => {
                 const progressPercentage = course.progress_percentage ?? 0;
                 const completedSections = course.completed_sections ?? 0;
-                const totalSections = course.total_sections ?? course.sections_count ?? 0;
+                const totalSections =
+                  course.total_sections ?? course.sections_count ?? 0;
                 return (
                   <Card
                     key={course.id}
@@ -995,14 +1085,20 @@ export function Learning() {
                         {course.is_enrolled && (
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Progress</span>
+                              <span className="text-muted-foreground">
+                                Progress
+                              </span>
                               <span className="font-medium">
                                 {Math.round(progressPercentage)}%
                               </span>
                             </div>
-                            <Progress value={progressPercentage} className="h-2" />
+                            <Progress
+                              value={progressPercentage}
+                              className="h-2"
+                            />
                             <div className="text-xs text-muted-foreground">
-                              {completedSections} of {totalSections} sections completed
+                              {completedSections} of {totalSections} sections
+                              completed
                             </div>
                           </div>
                         )}
@@ -1014,7 +1110,9 @@ export function Learning() {
                           <div className="flex items-center gap-1">
                             <Clock className="size-3" />
                             <span>
-                              {course.updated_at ? formatDate(course.updated_at) : "N/A"}
+                              {course.updated_at
+                                ? formatDate(course.updated_at)
+                                : "N/A"}
                             </span>
                           </div>
                         </div>
@@ -1048,7 +1146,8 @@ export function Learning() {
             <div className="relative bg-background rounded-lg shadow-lg max-w-md w-full mx-4 p-6 z-10">
               <h2 className="text-lg font-semibold mb-2">Are you sure?</h2>
               <p className="text-sm text-muted-foreground mb-6">
-                This action cannot be undone. This will permanently delete the course{" "}
+                This action cannot be undone. This will permanently delete the
+                course{" "}
                 <span className="font-medium text-foreground">
                   "{deleteDialogCourse.title}"
                 </span>{" "}
@@ -1118,9 +1217,7 @@ export function Learning() {
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <Badge
-                    className={`${getLevelColor(
-                      selectedCourseDetails.level
-                    )}`}
+                    className={`${getLevelColor(selectedCourseDetails.level)}`}
                   >
                     {selectedCourseDetails.level}
                   </Badge>
@@ -1191,9 +1288,7 @@ export function Learning() {
                       isAccessible
                         ? "cursor-pointer hover:shadow-md hover:border-primary/20"
                         : "opacity-60"
-                    } ${
-                      isCompleted ? "bg-green-50 border-green-200" : ""
-                    }`}
+                    } ${isCompleted ? "bg-green-50 border-green-200" : ""}`}
                     onClick={() =>
                       isAccessible && handleSectionSelect(section, index)
                     }
@@ -1226,7 +1321,8 @@ export function Learning() {
                             </h3>
                             {isCompleted && (section as any).completed_at && (
                               <p className="text-xs text-green-600 mt-1">
-                                Completed on {formatDate((section as any).completed_at)}
+                                Completed on{" "}
+                                {formatDate((section as any).completed_at)}
                               </p>
                             )}
                             {!isEnrolled && (
@@ -1368,7 +1464,9 @@ export function Learning() {
                           if (!videoId) return null;
 
                           // FIXED: Use youtube-nocookie.com and add proper parameters
-                          const videoSrc = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&color=white&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}${activeVideo === videoId ? "&autoplay=1" : ""}`;
+                          const videoSrc = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&iv_load_policy=3&color=white&enablejsapi=1&origin=${encodeURIComponent(
+                            window.location.origin
+                          )}${activeVideo === videoId ? "&autoplay=1" : ""}`;
 
                           return (
                             <Card key={`video-${index}`}>
@@ -1384,18 +1482,25 @@ export function Learning() {
                                     )
                                   }
                                 >
-                                  <div className="w-full" style={{ height: '520px' }}>
+                                  <div
+                                    className="w-full"
+                                    style={{ height: "520px" }}
+                                  >
                                     {/* FIXED: Added sandbox and proper allow attributes */}
                                     <iframe
                                       src={videoSrc}
                                       title={video.title}
                                       frameBorder="0"
                                       sandbox="allow-scripts allow-same-origin allow-presentation"
-                                      allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                                      allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                      referrerPolicy="strict-origin-when-cross-origin"
                                       allowFullScreen
                                       className="w-full h-full"
                                       onError={() => {
-                                        setVideoError(prev => ({ ...prev, [videoId!]: true }));
+                                        setVideoError((prev) => ({
+                                          ...prev,
+                                          [videoId!]: true,
+                                        }));
                                       }}
                                     />
                                   </div>
@@ -1410,15 +1515,15 @@ export function Learning() {
                                   <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                                     <p className="text-sm text-yellow-800">
                                       Unable to load video. Please{" "}
-                                      <a 
+                                      <a
                                         href={`https://www.youtube.com/watch?v=${videoId}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-blue-600 underline hover:text-blue-800"
                                       >
                                         watch on YouTube
-                                      </a>
-                                      {" "}or enable third-party cookies.
+                                      </a>{" "}
+                                      or enable third-party cookies.
                                     </p>
                                   </div>
                                 )}

@@ -1,9 +1,10 @@
 import { API_CONFIG } from '../config/api';
 
 // ========================
-// ASSESSMENT INTERFACES
+// ALL INTERFACES (Keep all existing interfaces exactly as they are)
 // ========================
 
+// Assessment interfaces
 export interface AssessmentCreate {
   title?: string;
   subject?: string;
@@ -46,10 +47,7 @@ export interface AssessmentEvaluation {
   note?: string;
 }
 
-// ========================
-// QUIZ INTERFACES
-// ========================
-
+// Quiz interfaces
 export interface QuizQuestion {
   id: string;
   question: string;
@@ -66,7 +64,6 @@ export interface QuizGenerationResponse {
   total_questions: number;
 }
 
-// NEW: Quiz submission interface
 export interface QuizSubmissionResponse {
   score: number;
   totalQuestions: number;
@@ -81,10 +78,7 @@ export interface QuizSubmissionResponse {
   }>;
 }
 
-// ========================
-// TRANSLATION INTERFACES
-// ========================
-
+// Translation interfaces
 export interface TranslateTextRequest {
   text: string;
   source_lang?: string;
@@ -117,10 +111,7 @@ export interface SupportedLanguages {
   languages: Record<string, string>;
 }
 
-// ========================
-// COMPANION INTERFACES
-// ========================
-
+// Companion interfaces
 export interface CompanionCreate {
   name: string;
   subject: string;
@@ -166,10 +157,7 @@ export interface SubjectsResponse {
   subjects: string[];
 }
 
-// ========================
-// USER INTERFACES
-// ========================
-
+// User interfaces
 export interface User {
   id: string;
   email: string;
@@ -179,6 +167,9 @@ export interface User {
   is_verified?: boolean;
   created_at?: string;
   name?: string;
+  firstname?: string;
+  lastname?: string;
+  isverified?: boolean;
 }
 
 export interface UserCreate {
@@ -194,8 +185,11 @@ export interface UserLogin {
   password: string;
 }
 
+// UPDATED LOGIN RESPONSE INTERFACE
 export interface LoginResponse {
   message: string;
+  access_token: string;  // ← JWT token
+  token_type: string;     // ← "bearer"
   user: User;
 }
 
@@ -209,10 +203,7 @@ export interface PasswordReset {
   confirmpassword: string;
 }
 
-// ========================
-// CHAT INTERFACES
-// ========================
-
+// Chat interfaces
 export interface ChatMessage {
   message?: string;
   content?: string;
@@ -284,10 +275,7 @@ export interface ChatFilesResponse {
   files: ChatFile[];
 }
 
-// ========================
-// COURSE INTERFACES
-// ========================
-
+// Course interfaces
 export interface CourseOutlineResponse {
   course_id: string;
   table_of_contents: string[];
@@ -414,10 +402,7 @@ export interface CompleteResponse {
   course_progress: number;
 }
 
-// ========================
-// SETTINGS INTERFACES
-// ========================
-
+// Settings interfaces
 export interface UserSettings {
   education_level: string;
   preferred_language: string;
@@ -433,10 +418,7 @@ export interface SettingsResponse {
   settings: UserSettings;
 }
 
-// ========================
-// GRADING INTERFACES
-// ========================
-
+// Grading interfaces
 export interface TextGradingRequest {
   question: string;
   answer: string;
@@ -463,10 +445,7 @@ export interface GradingResponse {
 
 export interface CodeGradingResponse extends GradingResponse {}
 
-// ========================
-// SUBMISSION INTERFACES
-// ========================
-
+// Submission interfaces
 export interface Submission {
   id: string;
   assignment_id: string;
@@ -507,10 +486,7 @@ export interface SubmissionDetailResponse {
   areas_for_improvement?: string[];
 }
 
-// ========================
-// ANALYTICS INTERFACES
-// ========================
-
+// Analytics interfaces
 export interface UserProfile {
   user_id: string;
   name: string;
@@ -601,10 +577,7 @@ export interface ProgressResponse {
   progress: CourseProgressData[];
 }
 
-// ========================
-// ANALYSIS INTERFACES
-// ========================
-
+// Analysis interfaces
 export interface PlagiarismResponse {
   plagiarism_score?: number;
   plagiarismscore?: number;
@@ -641,41 +614,97 @@ export interface HealthCheckResponse {
 }
 
 // ========================
-// API SERVICE CLASS
+// API SERVICE CLASS (UPDATED FOR JWT)
 // ========================
 
 class ApiService {
   private baseUrl: string;
   private currentUser: User | null = null;
+  private accessToken: string | null = null;  // ← NEW: JWT token storage
 
   constructor() {
     this.baseUrl = API_CONFIG.BASE_URL;
-    this.loadUserFromStorage();
+    // DON'T auto-load user on construction
   }
 
-  private loadUserFromStorage() {
-    const userData = localStorage.getItem('currentUser');
-    if (userData) {
-      this.currentUser = JSON.parse(userData);
+  // ========================
+  // SESSION MANAGEMENT (NEW)
+  // ========================
+
+  async restoreSession(): Promise<boolean> {
+    try {
+      const token = localStorage.getItem('access_token');
+      
+      if (!token) {
+        console.log('No access token found');
+        return false;
+      }
+
+      // Validate token with backend
+      const response = await fetch(`${this.baseUrl}/api/auth/me`, {
+        headers: { 
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        console.warn('Token validation failed:', response.status);
+        this.clearSession();
+        return false;
+      }
+
+      const user = await response.json();
+      
+      // Session is valid
+      this.currentUser = user;
+      this.accessToken = token;
+      
+      return true;
+    } catch (err) {
+      console.error('Session restoration error:', err);
+      this.clearSession();
+      return false;
     }
   }
 
-  private saveUserToStorage(user: User) {
+  private clearSession() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('currentUser');
+    this.currentUser = null;
+    this.accessToken = null;
+  }
+
+  private saveSession(user: User, token: string) {
+    localStorage.setItem('access_token', token);
     localStorage.setItem('currentUser', JSON.stringify(user));
     this.currentUser = user;
+    this.accessToken = token;
   }
+
+  // ========================
+  // HEADERS (UPDATED FOR JWT)
+  // ========================
 
   private getHeaders(includeContentType = true): HeadersInit {
     const headers: HeadersInit = {
       'Accept': 'application/json'
     };
+    
     if (includeContentType) {
       headers['Content-Type'] = 'application/json';
     }
-    // Add X-User-Id header if user is authenticated
+    
+    // Add Authorization header with JWT token
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+    
+    // Keep X-User-Id for backward compatibility if needed
     if (this.currentUser) {
       headers['X-User-Id'] = this.currentUser.id;
     }
+    
     return headers;
   }
 
@@ -691,12 +720,11 @@ class ApiService {
   }
 
   logout() {
-    localStorage.removeItem('currentUser');
-    this.currentUser = null;
+    this.clearSession();
   }
 
   // ========================
-  // AUTHENTICATION (5 endpoints)
+  // AUTHENTICATION (UPDATED FOR JWT)
   // ========================
 
   async register(userData: UserCreate): Promise<{ message: string; user_id: string }> {
@@ -713,7 +741,8 @@ class ApiService {
 
     const result = await response.json();
     
-    const loginResponse = await this.login({
+    // Auto-login after registration
+    await this.login({
       email: userData.email,
       password: userData.password
     });
@@ -722,10 +751,19 @@ class ApiService {
   }
 
   async login(credentials: UserLogin): Promise<LoginResponse> {
+    // Send as form data for OAuth2 compatibility
+    const formData = new URLSearchParams();
+    formData.append('username', credentials.email);
+    formData.append('password', credentials.password);
+    formData.append('grant_type', 'password');
+
     const response = await fetch(`${this.baseUrl}/api/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: formData,
     });
 
     if (!response.ok) {
@@ -734,17 +772,20 @@ class ApiService {
     }
 
     const result = await response.json();
-    this.saveUserToStorage(result.user);
+    
+    // Save session with JWT token
+    this.saveSession(result.user, result.access_token);
+    
     return result;
   }
 
   async getProfile(): Promise<User> {
-    if (!this.currentUser) {
+    if (!this.accessToken) {
       throw new Error('User not authenticated');
     }
 
     const response = await fetch(
-      `${this.baseUrl}/api/auth/profile?user_id=${this.currentUser.id}`,
+      `${this.baseUrl}/api/auth/me`,
       { headers: this.getHeaders() }
     );
 
@@ -786,9 +827,11 @@ class ApiService {
   }
 
   // ========================
-  // CHAT (7 endpoints)
+  // ALL YOUR OTHER METHODS - Keep exactly as they are
+  // The getHeaders() method now automatically adds JWT token
   // ========================
 
+  // CHAT METHODS
   async sendMessage(messageData: ChatMessage): Promise<ChatResponse> {
     if (!this.currentUser) {
       throw new Error('User not authenticated');
@@ -797,7 +840,7 @@ class ApiService {
     const payload = {
       ...messageData,
       user_id: this.currentUser.id,
-      context: 'general' // Allow general conversations
+      context: 'general'
     };
 
     const response = await fetch(`${this.baseUrl}/api/chat/`, {
@@ -881,8 +924,14 @@ class ApiService {
       formData.append('chat_id', chatId);
     }
 
+    const headers: HeadersInit = {};
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+
     const response = await fetch(`${this.baseUrl}/api/chat/upload`, {
       method: 'POST',
+      headers,
       body: formData,
     });
 
@@ -922,10 +971,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // COURSES (14 endpoints - UPDATED with quiz submission)
-  // ========================
-
+  // COURSES METHODS
   async generateCompleteCourse(courseTitle: string, educationLevel = 'Middle/High School'): Promise<Blob> {
     if (!this.currentUser) {
       throw new Error('User not authenticated');
@@ -936,8 +982,14 @@ class ApiService {
     formData.append('userid', this.currentUser.id);
     formData.append('educationlevel', educationLevel);
 
+    const headers: HeadersInit = {};
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+
     const response = await fetch(`${this.baseUrl}/api/courses/generate-complete`, {
       method: 'POST',
+      headers,
       body: formData,
     });
 
@@ -1153,10 +1205,6 @@ class ApiService {
     return response.json();
   }
 
-  /**
-   * Generate quiz for a specific section
-   * Returns 5 quiz questions based on section content
-   */
   async generateSectionQuiz(courseId: string, sectionId: string): Promise<QuizGenerationResponse> {
     if (!this.currentUser) {
       throw new Error('User not authenticated');
@@ -1178,13 +1226,6 @@ class ApiService {
     return response.json();
   }
 
-  /**
-   * Submit quiz answers for validation
-   * @param courseId - The course ID
-   * @param sectionId - The section ID
-   * @param answers - Object with question_id as key and selected answer as value
-   * @returns Quiz results with score and validation
-   */
   async submitSectionQuiz(
     courseId: string,
     sectionId: string,
@@ -1211,10 +1252,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // ASSESSMENTS (4 endpoints)
-  // ========================
-
+  // ASSESSMENTS METHODS
   async createAssessment(data: AssessmentCreate): Promise<Assessment> {
     const response = await fetch(`${this.baseUrl}/api/assessments/`, {
       method: 'POST',
@@ -1272,10 +1310,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // TRANSLATION (6 endpoints)
-  // ========================
-
+  // TRANSLATION METHODS
   async translateText(
     text: string,
     sourceLang = 'auto',
@@ -1371,10 +1406,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // COMPANIONS (11 endpoints)
-  // ========================
-
+  // COMPANIONS METHODS
   async createCompanion(data: CompanionCreate): Promise<Companion> {
     const response = await fetch(`${this.baseUrl}/api/companions/`, {
       method: 'POST',
@@ -1530,10 +1562,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // GRADING (2 endpoints)
-  // ========================
-
+  // GRADING METHODS
   async gradeText(request: TextGradingRequest): Promise<GradingResponse> {
     const response = await fetch(`${this.baseUrl}/api/grading/text`, {
       method: 'POST',
@@ -1562,10 +1591,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // ANALYSIS (2 endpoints)
-  // ========================
-
+  // ANALYSIS METHODS
   async checkPlagiarism(text: string): Promise<PlagiarismResponse> {
     if (!this.currentUser) {
       throw new Error('User not authenticated');
@@ -1608,10 +1634,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // SUBMISSIONS (6 endpoints)
-  // ========================
-
+  // SUBMISSIONS METHODS
   async submitAssignment(
     assignmentId: string,
     userId: string,
@@ -1723,10 +1746,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // ANALYTICS (3 endpoints)
-  // ========================
-
+  // ANALYTICS METHODS
   async getUserAnalytics(): Promise<AnalyticsPayload> {
     const user = this.getCurrentUser();
     if (!user) {
@@ -1781,10 +1801,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // SETTINGS (2 endpoints)
-  // ========================
-
+  // SETTINGS METHODS
   async getSettings(): Promise<{
     success: boolean;
     user: {
@@ -1838,10 +1855,7 @@ class ApiService {
     return response.json();
   }
 
-  // ========================
-  // SYSTEM (3 endpoints)
-  // ========================
-
+  // SYSTEM METHODS
   async healthCheck(): Promise<HealthCheckResponse> {
     const response = await fetch(`${this.baseUrl}/api/health`, {
       method: 'GET',

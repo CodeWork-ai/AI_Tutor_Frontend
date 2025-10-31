@@ -208,6 +208,26 @@ function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailR
   return merged;
 }
 
+// Helper: extract YouTube ID from common URL formats
+function extractYouTubeId(link?: string | null) {
+  if (!link) return null;
+  try {
+    if (link.includes("youtube.com/embed/")) {
+      return link.split("youtube.com/embed/")[1].split(/[?#&]/)[0];
+    }
+    if (link.includes("youtube.com/watch?v=")) {
+      const parts = link.split("v=")[1];
+      return parts ? parts.split(/[?#&]/)[0] : null;
+    }
+    if (link.includes("youtu.be/")) {
+      return link.split("youtu.be/")[1].split(/[?#&]/)[0];
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export function Learning() {
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("courses");
@@ -274,6 +294,19 @@ export function Learning() {
       return () => clearTimeout(timer);
     }
   }, [activeVideo, isYTReady]);
+
+  // Also initialize players for all videos in the selected section when the API is ready
+  useEffect(() => {
+    if (!isYTReady || !learning.selectedSection) return;
+    const links = learning.selectedSection.video_links || [];
+    links.forEach((video: any) => {
+      const vid = extractYouTubeId(video.link);
+      if (vid && !playerRef.current[vid]) {
+        // small timeout to let DOM render the player divs
+        setTimeout(() => initializeYouTubePlayer(vid), 50);
+      }
+    });
+  }, [learning.selectedSection, isYTReady]);
 
   // Cleanup player when video changes
   useEffect(() => {
@@ -646,7 +679,12 @@ export function Learning() {
           currentSectionIndex: index,
         }));
         setViewMode("section-learning");
-        setActiveVideo(null);
+        // Auto-select first video in the section so the player initializes
+        const firstLink = Array.isArray(formattedSection.video_links) && formattedSection.video_links.length > 0
+          ? formattedSection.video_links[0].link
+          : null;
+        const firstVideoId = extractYouTubeId(firstLink);
+        setActiveVideo(firstVideoId);
       }
     } catch (error) {
       console.error("Failed to load section details:", error);
@@ -1499,34 +1537,14 @@ export function Learning() {
                               </CardHeader>
                               <CardContent>
                                 <div className="rounded-lg overflow-hidden bg-black/90 relative group transition-all">
-                                  <div className="w-full" style={{ height: '520px' }}>
-                                    {/* YouTube Player Container */}
-                                    <div 
-                                      id={`player-${videoId}`}
-                                      className="w-full h-full"
-                                      style={{
-                                        display: activeVideo === videoId ? 'block' : 'none'
-                                      }}
-                                    />
-                                    
-                                    {/* Thumbnail when not active */}
-                                    {activeVideo !== videoId && (
-                                      <div 
-                                        className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/20 group-hover:from-black/70 group-hover:to-black/30 transition-all flex items-center justify-center cursor-pointer"
-                                        onClick={() => setActiveVideo(videoId)}
-                                        style={{
-                                          backgroundImage: `url(https://img.youtube.com/vi/${videoId}/maxresdefault.jpg)`,
-                                          backgroundSize: 'cover',
-                                          backgroundPosition: 'center'
-                                        }}
-                                      >
-                                        <div className="text-center">
-                                          <PlayCircle className="size-16 text-white/90 group-hover:scale-110 group-hover:text-white transition-all mx-auto mb-2" />
-                                          <p className="text-white text-sm">Click to play</p>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
+                                    <div className="w-full" style={{ height: '520px' }}>
+                                      {/* YouTube Player Container (always visible iframe) */}
+                                      <div
+                                        id={`player-${videoId}`}
+                                        className="w-full h-full"
+                                        style={{ display: 'block' }}
+                                      />
+                                    </div>
                                 </div>
                                 
                                 <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">

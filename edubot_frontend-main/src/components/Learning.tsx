@@ -1,4 +1,4 @@
-// src/components/Learning.tsx - PART 1 of 2
+// src/components/Learning.tsx
 
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "./ui/button";
@@ -208,7 +208,6 @@ function normalizeSectionDetail(sectionDetail: ApiSectionDetail & SectionDetailR
   return merged;
 }
 
-// Helper: extract YouTube ID from common URL formats
 function extractYouTubeId(link?: string | null) {
   if (!link) return null;
   try {
@@ -229,6 +228,7 @@ function extractYouTubeId(link?: string | null) {
 }
 
 export function Learning() {
+  // State declarations
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("courses");
   const [courses, setCourses] = useState<Course[]>([]);
@@ -255,13 +255,10 @@ export function Learning() {
   });
   const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
   const [videoError, setVideoError] = useState<{ [key: string]: boolean }>({});
-  
-  // Video progress tracking and YouTube API states
   const [videoProgress, setVideoProgress] = useState<{ [key: string]: number }>({});
   const playerRef = useRef<{ [key: string]: any }>({});
   const [isYTReady, setIsYTReady] = useState(false);
   const progressIntervalRef = useRef<{ [key: string]: any }>({});
-  
   const isUpdatingRef = useRef(false);
   const localCompletedSectionsRef = useRef<Set<string>>(new Set());
 
@@ -285,7 +282,6 @@ export function Learning() {
     loadCourses();
   }, []);
 
-  // ✅ FIX: Initialize YouTube player when activeVideo changes
   useEffect(() => {
     if (activeVideo && isYTReady && !playerRef.current[activeVideo]) {
       const timer = setTimeout(() => {
@@ -295,20 +291,17 @@ export function Learning() {
     }
   }, [activeVideo, isYTReady]);
 
-  // Also initialize players for all videos in the selected section when the API is ready
   useEffect(() => {
     if (!isYTReady || !learning.selectedSection) return;
     const links = learning.selectedSection.video_links || [];
     links.forEach((video: any) => {
       const vid = extractYouTubeId(video.link);
       if (vid && !playerRef.current[vid]) {
-        // small timeout to let DOM render the player divs
         setTimeout(() => initializeYouTubePlayer(vid), 50);
       }
     });
   }, [learning.selectedSection, isYTReady]);
 
-  // Cleanup player when video changes
   useEffect(() => {
     return () => {
       if (activeVideo && progressIntervalRef.current[activeVideo]) {
@@ -318,6 +311,7 @@ export function Learning() {
     };
   }, [activeVideo]);
 
+  // Function declarations
   const loadCourses = async () => {
     try {
       setIsLoading(true);
@@ -679,7 +673,6 @@ export function Learning() {
           currentSectionIndex: index,
         }));
         setViewMode("section-learning");
-        // Auto-select first video in the section so the player initializes
         const firstLink = Array.isArray(formattedSection.video_links) && formattedSection.video_links.length > 0
           ? formattedSection.video_links[0].link
           : null;
@@ -780,7 +773,6 @@ export function Learning() {
     }
   };
 
-  // Initialize YouTube player with forward seeking prevention
   const initializeYouTubePlayer = (videoId: string) => {
     if (!window.YT || !isYTReady || playerRef.current[videoId]) {
       return;
@@ -802,7 +794,6 @@ export function Learning() {
         },
         events: {
           onReady: (event: any) => {
-            // Track progress every 500ms
             progressIntervalRef.current[videoId] = setInterval(() => {
               if (playerRef.current[videoId] && playerRef.current[videoId].getCurrentTime) {
                 try {
@@ -822,13 +813,11 @@ export function Learning() {
             }, 500);
           },
           onStateChange: (event: any) => {
-            // Check for seeking (paused or buffering states)
             if (event.data === window.YT.PlayerState.PAUSED || event.data === window.YT.PlayerState.BUFFERING) {
               try {
                 const currentTime = playerRef.current[videoId].getCurrentTime();
                 const maxWatched = videoProgress[videoId] || 0;
 
-                // If user tried to skip forward beyond watched content
                 if (currentTime > maxWatched + 2) {
                   playerRef.current[videoId].seekTo(maxWatched, true);
                   playerRef.current[videoId].playVideo();
@@ -1191,7 +1180,6 @@ export function Learning() {
           </div>
         </ScrollArea>
 
-        {/* Delete Confirmation Dialog */}
         {deleteDialogCourse && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div
@@ -1420,7 +1408,7 @@ export function Learning() {
     );
   }
 
-  // Section Learning View - WITH VIDEO FORWARD RESTRICTION
+  // Section Learning View
   if (
     viewMode === "section-learning" &&
     learning.selectedSection &&
@@ -1495,7 +1483,6 @@ export function Learning() {
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="max-w-4xl mx-auto p-6 space-y-10">
-              {/* VIDEO SECTION WITH FORWARD SEEKING PREVENTION */}
               {learning.selectedSection.video_links &&
                 learning.selectedSection.video_links.length > 0 && (
                   <div className="space-y-10">
@@ -1538,7 +1525,6 @@ export function Learning() {
                               <CardContent>
                                 <div className="rounded-lg overflow-hidden bg-black/90 relative group transition-all">
                                     <div className="w-full" style={{ height: '520px' }}>
-                                      {/* YouTube Player Container (always visible iframe) */}
                                       <div
                                         id={`player-${videoId}`}
                                         className="w-full h-full"
@@ -1562,7 +1548,6 @@ export function Learning() {
                   </div>
                 )}
               
-              {/* REST OF SECTION CONTENT */}
               <div className="prose prose-gray dark:prose-invert max-w-none">
                 {learning.selectedSection.introduction && (
                   <>

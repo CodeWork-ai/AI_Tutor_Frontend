@@ -49,11 +49,17 @@ export function FileUpload({ chatId, onFileUploaded }: FileUploadProps) {
       let activeChatId = chatId;
       
       if (!activeChatId) {
+        // Include Authorization header so backend recognizes the user session
+        const token = localStorage.getItem('access_token');
         const createResponse = await fetch(
           `${apiService['baseUrl']}/api/chat/create?user_id=${user.id}&title=File: ${file.name.substring(0, 30)}&level=school`,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              'X-User-Id': user.id,
+            }
           }
         );
         
@@ -70,10 +76,16 @@ export function FileUpload({ chatId, onFileUploaded }: FileUploadProps) {
       const formData = new FormData();
       formData.append('file', file);
 
+      // For multipart/form-data uploads, do NOT set Content-Type (browser will add boundary)
+      const token = localStorage.getItem('access_token');
       const uploadResponse = await fetch(
         `${apiService['baseUrl']}/api/chat/upload?chat_id=${activeChatId}&user_id=${user.id}`,
         {
           method: 'POST',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'X-User-Id': user.id,
+          },
           body: formData
         }
       );

@@ -28,6 +28,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   const [isForgot, setIsForgot] = useState(false);
   const [isReset, setIsReset] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const [submittedToken, setSubmittedToken] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
 
   // Separate state for login form
@@ -205,17 +206,22 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   const handleResetSuccess = () => {
     setIsReset(false);
     setSubmittedEmail("");
+    setSubmittedToken(undefined);
     setIsForgot(false);
     toast.info(
       "Password reset successful! You can now log in with your new password."
     );
   };
 
-  const handleForgotSuccess = (email: string) => {
+  const handleForgotSuccess = (email: string, token?: string) => {
+    // token may be provided by the backend in some environments (dev/testing).
+    if (token) setSubmittedToken(token);
+    // Keep the UX simple: show success toast and remain on the login screen.
+    // The user should click the link in their email to open the reset page.
     toast.success("Reset link sent! Check your inbox.");
     setSubmittedEmail(email);
     setIsForgot(false);
-    setIsReset(true);
+    // Do not open the in-app Reset component; user will follow the email link.
   };
 
   if (isForgot) {
@@ -228,7 +234,14 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   }
 
   if (isReset) {
-    return <Reset email={submittedEmail} onSuccess={handleResetSuccess} />;
+    return (
+      <Reset
+        email={submittedEmail}
+        // pass token if available so Reset can pre-fill it
+        resetTokenProp={submittedToken}
+        onSuccess={handleResetSuccess}
+      />
+    );
   }
 
   return (
@@ -253,7 +266,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         <CardContent>
           {/* Make the Tabs area scrollable so long forms (register) don't overflow the card */}
           {/* Use fixed height and flex so TabContent (with flex-1) can grow and scroll */}
-          <div className="h-[60vh] flex flex-col min-h-0">
+          <div className="max-h-[80vh] h-auto w-full flex flex-col min-h-0">
           <Tabs
             value={activeTab}
             onValueChange={(value) =>
@@ -268,7 +281,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
 
             {/* LOGIN TAB */}
             <TabsContent value="login" className="flex-1 space-y-4 mt-6 min-h-0">
-              <ScrollArea className="h-full pr-4">
+              <ScrollArea className="h-full pr-4 overflow-auto">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <label
@@ -392,7 +405,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
 
             {/* REGISTER TAB */}
             <TabsContent value="register" className="flex-1 space-y-4 mt-6 min-h-0">
-              <ScrollArea className="h-full pr-4">
+              <ScrollArea className="h-full pr-4 overflow-auto">
               <form onSubmit={handleRegister} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

@@ -11,7 +11,8 @@ import axios, { AxiosError } from 'axios';
 
 interface ForgotProps {
   onBackToLogin: (target?: 'login' | 'register') => void;
-  onReset?: (email: string) => void;
+  // onReset now receives optional token returned by the backend
+  onReset?: (email: string, token?: string) => void;
 }
 
 interface ApiErrorResponse {
@@ -80,8 +81,11 @@ const Forgot: React.FC<ForgotProps> = ({ onBackToLogin, onReset }) => {
       });
 
       // Notify parent (AuthForm) that reset was initiated so it can show the Reset UI
+      // If backend returned a token (useful for dev environments), pass it up so the
+      // Reset form can pre-fill the token and avoid requiring the user to copy it
+      // from the email.
       if (typeof (onReset) === 'function') {
-        onReset(trimmedEmail);
+        onReset(trimmedEmail, res?.token);
       }
 
     } catch (err) {

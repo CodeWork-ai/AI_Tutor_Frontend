@@ -433,7 +433,7 @@ export function Assessments() {
                       transition={{ delay: 0.2, type: 'spring' }}
                       className="mx-auto size-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg mb-4"
                     >
-                      <Trophy className="size-12 text-white" />
+                      <Trophy className="size-12 text-green" />
                     </motion.div>
                     <CardTitle className="text-4xl">Assessment Complete!</CardTitle>
                     <CardDescription className="text-lg mt-2">

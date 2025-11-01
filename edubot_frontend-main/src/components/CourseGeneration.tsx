@@ -18,6 +18,7 @@ const INITIAL_FORM_STATE = {
 export function CourseGeneration() {
   const [isLoading, setIsLoading] = useState(false);
   const [completeForm, setCompleteForm] = useState(INITIAL_FORM_STATE);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [generatedCourseTitle, setGeneratedCourseTitle] = useState<string>('');
 
@@ -41,10 +42,24 @@ export function CourseGeneration() {
   };
 
   const handleGenerateComplete = async () => {
-    if (!completeForm.courseTitle.trim()) {
+    const title = completeForm.courseTitle || '';
+    if (!title.trim()) {
+      setTitleError('Please enter a course title');
       toast.error('Please enter a course title');
       return;
     }
+
+    // Validate title: allow letters, numbers, spaces and a small set of punctuation
+    const validTitleRegex = /^[A-Za-z0-9\s\-_.:,()&'"/]+$/;
+    if (!validTitleRegex.test(title)) {
+      const msg = 'Course title contains invalid characters. Only letters, numbers, spaces and - _ . : , ( ) & / " ' + "'" + ' are allowed.';
+      setTitleError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    // Clear any previous title error
+    setTitleError(null);
 
     setIsLoading(true);
     try {
@@ -102,9 +117,15 @@ export function CourseGeneration() {
                     id="courseTitle"
                     placeholder="e.g., Introduction to Machine Learning"
                     value={completeForm.courseTitle}
-                    onChange={(e) => setCompleteForm(prev => ({ ...prev, courseTitle: e.target.value }))}
+                    onChange={(e) => {
+                      setCompleteForm(prev => ({ ...prev, courseTitle: e.target.value }));
+                      setTitleError(null);
+                    }}
                     disabled={isLoading}
                   />
+                  {titleError && (
+                    <p className="text-red-600 text-sm mt-1">{titleError}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="educationLevel">Education Level</Label>

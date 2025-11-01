@@ -12,10 +12,12 @@ import { apiService } from '../services/api';
 // Props interface for when used as a child component
 interface ResetProps {
   email?: string;
+  // optional token provided by the backend (useful in dev/test where email contains token)
+  resetTokenProp?: string;
   onSuccess?: () => void;
 }
 
-const Reset: React.FC<ResetProps> = ({ email: propEmail, onSuccess }) => {
+const Reset: React.FC<ResetProps> = ({ email: propEmail, resetTokenProp, onSuccess }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -36,6 +38,13 @@ const Reset: React.FC<ResetProps> = ({ email: propEmail, onSuccess }) => {
   const [resetToken, setResetToken] = useState('');
 
   useEffect(() => {
+    // If a token was passed as a prop (from Forgot), use it and mark checked
+    if (resetTokenProp) {
+      setResetToken(resetTokenProp);
+      setTokenChecked(true);
+      return;
+    }
+
     // Only check token once when using URL-based routing
     if (!tokenChecked && !propEmail) {
       if (!token) {
@@ -44,10 +53,10 @@ const Reset: React.FC<ResetProps> = ({ email: propEmail, onSuccess }) => {
       }
       setTokenChecked(true);
     } else if (propEmail) {
-      // If using as child component with props, mark as checked
+      // If using as child component with props (no URL token), mark as checked
       setTokenChecked(true);
     }
-  }, [token, navigate, tokenChecked, propEmail]);
+  }, [token, navigate, tokenChecked, propEmail, resetTokenProp]);
 
   const calculateStrength = (password: string): number => {
     let score = 0;
